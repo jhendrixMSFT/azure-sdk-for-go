@@ -21,6 +21,7 @@ package redis
 // Changes may cause incorrect behavior and will be lost if the code is regenerated.
 
 import (
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/go-autorest/autorest"
 )
 
@@ -34,6 +35,7 @@ type BaseClient struct {
 	autorest.Client
 	BaseURI        string
 	SubscriptionID string
+	Pipeline       pipeline.Pipeline
 }
 
 // New creates an instance of the BaseClient client.

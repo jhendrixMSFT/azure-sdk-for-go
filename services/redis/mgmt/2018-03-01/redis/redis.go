@@ -19,10 +19,15 @@ package redis
 
 import (
 	"context"
+	"io"
+	"io/ioutil"
+	"net/http"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-sdk-for-go/internal"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/validation"
-	"net/http"
 )
 
 // Client is the REST API for Azure Redis Cache Service.
@@ -44,24 +49,37 @@ func NewClientWithBaseURI(baseURI string, subscriptionID string) Client {
 // Parameters:
 // parameters - parameters supplied to the CheckNameAvailability Redis operation.
 func (client Client) CheckNameAvailability(ctx context.Context, parameters CheckNameAvailabilityParameters) (result autorest.Response, err error) {
-	req, err := client.CheckNameAvailabilityPreparer(ctx, parameters)
-	if err != nil {
-		err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", nil, "Failure preparing request")
-		return
+	if client.Pipeline == nil {
+		var req *http.Request
+		req, err = client.CheckNameAvailabilityPreparer(ctx, parameters)
+		if err != nil {
+			err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", nil, "Failure preparing request")
+			return
+		}
+		var resp *http.Response
+		resp, err = client.CheckNameAvailabilitySender(req)
+		if err != nil {
+			result.Response = resp
+			err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", resp, "Failure sending request")
+			return
+		}
+		result, err = client.CheckNameAvailabilityResponder(resp)
+		if err != nil {
+			err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", resp, "Failure responding to request")
+		}
+	} else {
+		var req pipeline.Request
+		req, err = client.checkNameAvailabilityPreparer(ctx, parameters)
+		if err != nil {
+			return
+		}
+		var pr pipeline.Response
+		pr, err = client.Pipeline.Do(ctx, internal.ResponderPolicyFactory{Responder: client.checkNameAvailabilityResponder}, req)
+		if err != nil {
+			return
+		}
+		result.Response = pr.Response()
 	}
-
-	resp, err := client.CheckNameAvailabilitySender(req)
-	if err != nil {
-		result.Response = resp
-		err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", resp, "Failure sending request")
-		return
-	}
-
-	result, err = client.CheckNameAvailabilityResponder(resp)
-	if err != nil {
-		err = autorest.NewErrorWithError(err, "redis.Client", "CheckNameAvailability", resp, "Failure responding to request")
-	}
-
 	return
 }
 
@@ -86,6 +104,21 @@ func (client Client) CheckNameAvailabilityPreparer(ctx context.Context, paramete
 	return preparer.Prepare((&http.Request{}).WithContext(ctx))
 }
 
+func (client Client) checkNameAvailabilityPreparer(ctx context.Context, parameters CheckNameAvailabilityParameters) (pipeline.Request, error) {
+	req, err := internal.CreateRequest(http.MethodPost, client.BaseURI, "/subscriptions/{subscriptionId}/providers/Microsoft.Cache/CheckNameAvailability",
+		map[string]string{
+			"subscriptionId": internal.PathEscape(client.SubscriptionID),
+		})
+	if err != nil {
+		return req, err
+	}
+	queryParameters := req.URL.Query()
+	queryParameters.Set("api-version", "2018-03-01")
+	req.URL.RawQuery = queryParameters.Encode()
+	req.Header.Add("Content-Type", "application/json; charset=utf-8")
+	return internal.MarshalBodyAsJSON(req, parameters)
+}
+
 // CheckNameAvailabilitySender sends the CheckNameAvailability request. The method will close the
 // http.Response Body if it receives an error.
 func (client Client) CheckNameAvailabilitySender(req *http.Request) (*http.Response, error) {
@@ -103,6 +136,16 @@ func (client Client) CheckNameAvailabilityResponder(resp *http.Response) (result
 		autorest.ByClosing())
 	result.Response = resp
 	return
+}
+
+func (client Client) checkNameAvailabilityResponder(resp pipeline.Response) (pipeline.Response, error) {
+	err := internal.ValidateResponse(resp, http.StatusOK)
+	if err != nil {
+		return resp, err
+	}
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return resp, err
 }
 
 // Create create or replace (overwrite/recreate, with potential downtime) an existing Redis cache.
@@ -419,16 +462,30 @@ func (client Client) Get(ctx context.Context, resourceGroupName string, name str
 		return
 	}
 
-	resp, err := client.GetSender(req)
-	if err != nil {
-		result.Response = autorest.Response{Response: resp}
-		err = autorest.NewErrorWithError(err, "redis.Client", "Get", resp, "Failure sending request")
-		return
-	}
-
-	result, err = client.GetResponder(resp)
-	if err != nil {
-		err = autorest.NewErrorWithError(err, "redis.Client", "Get", resp, "Failure responding to request")
+	if client.Pipeline == nil {
+		var resp *http.Response
+		resp, err = client.GetSender(req)
+		if err != nil {
+			result.Response = autorest.Response{Response: resp}
+			err = autorest.NewErrorWithError(err, "redis.Client", "Get", resp, "Failure sending request")
+			return
+		}
+		result, err = client.GetResponder(resp)
+		if err != nil {
+			err = autorest.NewErrorWithError(err, "redis.Client", "Get", resp, "Failure responding to request")
+		}
+	} else {
+		var req pipeline.Request
+		req, err = client.getPreparer(ctx, resourceGroupName, name)
+		if err != nil {
+			return
+		}
+		var pr pipeline.Response
+		pr, err = client.Pipeline.Do(ctx, internal.ResponderPolicyFactory{Responder: client.getResponder}, req)
+		if err != nil {
+			return
+		}
+		result = *(pr.(internal.ResponseWrapper).Unwrap().(*ResourceType))
 	}
 
 	return
@@ -455,6 +512,22 @@ func (client Client) GetPreparer(ctx context.Context, resourceGroupName string, 
 	return preparer.Prepare((&http.Request{}).WithContext(ctx))
 }
 
+func (client Client) getPreparer(ctx context.Context, resourceGroupName string, name string) (pipeline.Request, error) {
+	req, err := internal.CreateRequest(http.MethodGet, client.BaseURI, "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/Redis/{name}",
+		map[string]string{
+			"name":              autorest.Encode("path", name),
+			"resourceGroupName": autorest.Encode("path", resourceGroupName),
+			"subscriptionId":    autorest.Encode("path", client.SubscriptionID),
+		})
+	if err != nil {
+		return req, err
+	}
+	queryParameters := req.URL.Query()
+	queryParameters.Set("api-version", "2018-03-01")
+	req.URL.RawQuery = queryParameters.Encode()
+	return req, nil
+}
+
 // GetSender sends the Get request. The method will close the
 // http.Response Body if it receives an error.
 func (client Client) GetSender(req *http.Request) (*http.Response, error) {
@@ -473,6 +546,16 @@ func (client Client) GetResponder(resp *http.Response) (result ResourceType, err
 		autorest.ByClosing())
 	result.Response = autorest.Response{Response: resp}
 	return
+}
+
+func (client Client) getResponder(resp pipeline.Response) (pipeline.Response, error) {
+	err := internal.ValidateResponse(resp, http.StatusOK)
+	if err != nil {
+		return resp, err
+	}
+	var result ResourceType
+	err = internal.UnmarshalJSONBody(resp, &result)
+	return internal.NewResponseWrapper(resp, &result), err
 }
 
 // ImportData import data into Redis cache.

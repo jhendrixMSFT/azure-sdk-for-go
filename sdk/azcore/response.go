@@ -57,7 +57,7 @@ func (r *Response) UnmarshalAsXML(v interface{}) error {
 	r.removeBOM()
 	err := xml.Unmarshal(r.Payload, v)
 	if err != nil {
-		err = fmt.Errorf("error unmarshalling type %s: %w", reflect.TypeOf(v).Elem().Name(), err)
+		err = fmt.Errorf("unmarshalling type %s: %w", reflect.TypeOf(v).Elem().Name(), err)
 	}
 	return err
 }
@@ -76,8 +76,8 @@ func (r *Response) removeBOM() {
 	r.Payload = bytes.TrimPrefix(r.Payload, []byte("\xef\xbb\xbf"))
 }
 
-// retryAfter returns (non-zero, true) if the response contains a Retry-After header value
-func (r *Response) retryAfter() (time.Duration, bool) {
+// RetryAfter returns (non-zero, true) if the response contains a Retry-After header value
+func (r *Response) RetryAfter() (time.Duration, bool) {
 	if r == nil {
 		return 0, false
 	}

@@ -173,7 +173,7 @@ func (p *retryPolicy) Do(ctx context.Context, req *Request) (resp *Response, err
 		resp.Drain()
 
 		// use the delay from retry-after if available
-		delay, ok := resp.retryAfter()
+		delay, ok := resp.RetryAfter()
 		if !ok {
 			delay = p.options.calcDelay(try)
 		}

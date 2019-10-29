@@ -1,3 +1,6 @@
-github.com/Azure/azure-sdk-for-go v34.2.0+incompatible h1:nOMcbdfRmT5VX7Az7AJ4LRi5cpBOOfr+mF7QpoetwyI=
-github.com/Azure/azure-sdk-for-go v34.3.0+incompatible h1:MHq0zfuSOzY0J0lFWKDK0KmZZS1qn9pT7KHL6GuRmq8=
-github.com/Azure/azure-sdk-for-go v34.4.0+incompatible h1:NQG6PyG1+y9lL5SLWy+urw+VYMQloAKwmdqAzg8ZorM=
+github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
+golang.org/x/net v0.0.0-20190909003024-a7b16738d86b/go.mod h1:z5CRVTTTmAJ677TzLLGU+0bjPO0LkuOLi4/5GtJWs/s=
+golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20190911201528-7ad0cfa0b7b5/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=

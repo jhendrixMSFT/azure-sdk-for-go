@@ -77,7 +77,7 @@ func newManagedIdentityClient(options *IdentityClientOptions) (*managedIdentityC
 // - ctx: The current request context
 // - clientID: The client (application) ID of the service principal
 // - scopes: The scopes required for the token
-func (c *managedIdentityClient) authenticate(ctx context.Context, clientID string, scopes []string) (*azcore.AccessToken, error) {
+func (c *managedIdentityClient) authenticate(ctx context.Context, clientID string, scopes []string) (*AccessToken, error) {
 	// TODO: fix variable name
 	sType, err := c.getMSIType(ctx)
 	if err != nil {
@@ -96,7 +96,7 @@ func (c *managedIdentityClient) authenticate(ctx context.Context, clientID strin
 	return AT, nil
 }
 
-func (c *managedIdentityClient) sendAuthRequest(ctx context.Context, msiType msiType, clientID string, scopes []string) (*azcore.AccessToken, error) {
+func (c *managedIdentityClient) sendAuthRequest(ctx context.Context, msiType msiType, clientID string, scopes []string) (*AccessToken, error) {
 	msg, err := c.createAuthRequest(msiType, clientID, scopes)
 	if err != nil {
 		return nil, err
@@ -121,8 +121,8 @@ func (c *managedIdentityClient) sendAuthRequest(ctx context.Context, msiType msi
 	return nil, &authFailed
 }
 
-func (c *managedIdentityClient) createAccessToken(res *azcore.Response) (*azcore.AccessToken, error) {
-	value := azcore.AccessToken{}
+func (c *managedIdentityClient) createAccessToken(res *azcore.Response) (*AccessToken, error) {
+	value := AccessToken{}
 	if err := json.Unmarshal(res.Payload, &value); err != nil {
 		return nil, fmt.Errorf("azcore.AccessToken: %w", err)
 	}

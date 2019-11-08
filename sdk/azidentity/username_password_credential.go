@@ -8,15 +8,13 @@ package azidentity
 
 import (
 	"context"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // UsernamePasswordCredential enables authentication to Azure Active Directory using a user's  username and password. If the user has MFA enabled this
 // credential will fail to get a token returning an AuthenticationFailureError. Also, this credential requires a high degree of trust and is not
 // recommended outside of prototyping when more secure credentials can be used.
 type UsernamePasswordCredential struct {
-	azcore.TokenCredential
+	TokenCredential
 
 	client *aadIdentityClient
 
@@ -44,6 +42,6 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 // - scopes: The list of scopes for which the token will have access.
 // - ctx: controlling the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
-func (c UsernamePasswordCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c UsernamePasswordCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return c.client.authenticateUsernamePassword(ctx, c.TenantID, c.ClientID, c.Username, c.Password, scopes)
 }

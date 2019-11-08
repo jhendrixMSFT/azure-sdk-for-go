@@ -5,18 +5,16 @@ package azidentity
 
 import (
 	"context"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // ChainedTokenCredential provides a TokenCredential implementation which chains multiple TokenCredential implementations to be tried in order
 // until one of the GetToken methods returns a non-default AccessToken.
 type ChainedTokenCredential struct {
-	sources []azcore.TokenCredential
+	sources []TokenCredential
 }
 
 // NewChainedTokenCredential creates an instance of ChainedTokenCredential with the specified TokenCredential sources.
-func NewChainedTokenCredential(sources ...azcore.TokenCredential) (*ChainedTokenCredential, error) {
+func NewChainedTokenCredential(sources ...TokenCredential) (*ChainedTokenCredential, error) {
 	if len(sources) == 0 {
 		return nil, &CredentialUnavailableError{Message: "NewChainedTokenCredential: length of sources cannot be 0"}
 	}
@@ -31,9 +29,9 @@ func NewChainedTokenCredential(sources ...azcore.TokenCredential) (*ChainedToken
 }
 
 // GetToken sequentially calls TokenCredential.GetToken on all the specified sources, returning the first non default AccessToken.
-func (c *ChainedTokenCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c *ChainedTokenCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	// CP: Notes from session with Jeff, have two funcs for the DefaultAzureCredential the main default func will issue the call that hits the wire, however internally first we create the chain and return a credUnavailable error if no credentials are found, if one works then we immediately return the one that works. End goal to always try to use the same credential type so we dont switch between credentials during execution, or at least reduce the possibility of that happening?
-	var token *azcore.AccessToken
+	var token *AccessToken
 	var err error
 	var errList []error
 

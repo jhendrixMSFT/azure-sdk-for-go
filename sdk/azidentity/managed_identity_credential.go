@@ -5,8 +5,6 @@ package azidentity
 
 import (
 	"context"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // ManagedIdentityCredential attempts authentication using a managed identity that has been assigned to the deployment environment. This authentication type works in Azure VMs,
@@ -33,6 +31,6 @@ func NewManagedIdentityCredential(clientID string, options *IdentityClientOption
 // GetToken obtains an AccessToken from the Managed Identity service if available.
 // - scopes: The list of scopes for which the token will have access.
 // Returns an AccessToken which can be used to authenticate service client calls, or a default AccessToken if no managed identity is available.
-func (c ManagedIdentityCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c ManagedIdentityCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return c.client.authenticate(ctx, c.clientID, scopes)
 }

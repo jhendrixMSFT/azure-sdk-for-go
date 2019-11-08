@@ -4,8 +4,10 @@
 package azidentity
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
@@ -13,6 +15,17 @@ import (
 const (
 	defaultAuthorityHost = "https://login.microsoftonline.com/"
 )
+
+// AccessToken is used to set and maintain tokens for authentication
+type AccessToken struct {
+	Token     string      `json:"access_token"`
+	ExpiresIn json.Number `json:"expires_in"`
+	ExpiresOn time.Time
+}
+
+type TokenCredential interface {
+	GetToken(ctx context.Context, scopes []string) (*AccessToken, error)
+}
 
 // AuthenticationFailedError is a struct used to marshal responses when authentication has failed
 type AuthenticationFailedError struct {

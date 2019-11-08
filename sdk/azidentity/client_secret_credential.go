@@ -13,6 +13,7 @@ import (
 // to configure a client secret can be found here:
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-access-web-apis#add-credentials-to-your-web-application
 type ClientSecretCredential struct {
+	azcore.Credential
 	client *aadIdentityClient
 	// TODO: unexport
 	TenantID string // Gets the Azure Active Directory tenant (directory) Id of the service principal
@@ -45,6 +46,10 @@ func NewClientSecretCredentialWithPipeline(tenantID string, clientID string, cli
 // ctx: controlling the request lifetime.
 // scopes: The list of scopes for which the token will have access.
 // Returns an AccessToken which can be used to authenticate service client calls.
-func (c ClientSecretCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c ClientSecretCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return c.client.authenticate(ctx, c.TenantID, c.ClientID, c.ClientSecret, scopes)
+}
+
+func (c ClientSecretCredential) Do(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
+	return req.Do(ctx)
 }

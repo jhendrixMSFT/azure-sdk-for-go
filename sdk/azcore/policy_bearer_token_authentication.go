@@ -4,17 +4,16 @@
 package azcore
 
 import (
-	"context"
-	"errors"
 	"time"
 )
 
 type bearerTokenAuthPolicy struct {
-	credential TokenCredential
-	refreshOn  time.Time
-	scopes     []string
+	//credential TokenCredential
+	refreshOn time.Time
+	scopes    []string
 }
 
+/*
 // NewBearerTokenAuthPolicy creates a BearerTokenAuthPolicy object configured using the specified scopes and Token Credential.
 func NewBearerTokenAuthPolicy(cred TokenCredential, scopes ...string) (Policy, error) {
 	if cred == nil {
@@ -43,3 +42,4 @@ func (c *bearerTokenAuthPolicy) Do(ctx context.Context, req *Request) (*Response
 	req.Request.Header.Set(HeaderAuthorization, "Bearer "+token.Token)
 	return req.Do(ctx)
 }
+*/

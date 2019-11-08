@@ -6,8 +6,6 @@ package azidentity
 import (
 	"context"
 	"os"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // EnvironmentCredential type enables authentication to Azure Active Directory using client secret
@@ -19,7 +17,7 @@ import (
 // perform the authentication using these details. Please consult the
 // documentation of that class for more details.
 type EnvironmentCredential struct {
-	credential azcore.TokenCredential
+	credential TokenCredential
 }
 
 // NewEnvironmentCredential creates an instance of the EnvironmentCredential type and reads client secret details from environment variables.
@@ -54,7 +52,7 @@ func NewEnvironmentCredential(options *IdentityClientOptions) (*EnvironmentCrede
 // scopes: The list of scopes for which the token will have access.
 // ctx: controlling the request lifetime.
 // If the environment variables AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET are not specified, the default AccessToken is returned
-func (c EnvironmentCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c EnvironmentCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return c.credential.GetToken(ctx, scopes)
 }
 

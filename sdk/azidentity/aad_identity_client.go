@@ -66,7 +66,7 @@ func newAADIdentityClientWithPipeline(options *IdentityClientOptions, pipeline a
 // clientID: The client (application) ID of the service principal
 // clientSecret: A client secret that was generated for the App Registration used to authenticate the client
 // scopes: The scopes required for the token
-func (c *aadIdentityClient) authenticate(ctx context.Context, tenantID string, clientID string, clientSecret string, scopes []string) (*azcore.AccessToken, error) {
+func (c *aadIdentityClient) authenticate(ctx context.Context, tenantID string, clientID string, clientSecret string, scopes []string) (*AccessToken, error) {
 	msg, err := c.createClientSecretAuthRequest(tenantID, clientID, clientSecret, scopes)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (c *aadIdentityClient) authenticate(ctx context.Context, tenantID string, c
 // clientID: The client (application) ID of the service principal
 // clientCertificatePath: The path to the client certificate PEM file
 // scopes: The scopes required for the token
-func (c *aadIdentityClient) authenticateCertificate(ctx context.Context, tenantID string, clientID string, clientCertificatePath string, scopes []string) (*azcore.AccessToken, error) {
+func (c *aadIdentityClient) authenticateCertificate(ctx context.Context, tenantID string, clientID string, clientCertificatePath string, scopes []string) (*AccessToken, error) {
 	msg, err := c.createClientCertificateAuthRequest(tenantID, clientID, clientCertificatePath, scopes)
 	if err != nil {
 		return nil, err
@@ -110,8 +110,8 @@ func (c *aadIdentityClient) authenticateCertificate(ctx context.Context, tenantI
 	return nil, newAuthenticationFailedError(resp)
 }
 
-func (c aadIdentityClient) createAccessToken(res *azcore.Response) (*azcore.AccessToken, error) {
-	value := &azcore.AccessToken{}
+func (c aadIdentityClient) createAccessToken(res *azcore.Response) (*AccessToken, error) {
+	value := &AccessToken{}
 	if err := json.Unmarshal(res.Payload, &value); err != nil {
 		return nil, fmt.Errorf("azcore.AccessToken: %w", err)
 	}
@@ -187,7 +187,7 @@ func (c *aadIdentityClient) createClientCertificateAuthRequest(tenantID string, 
 // username: User's account username
 // password: User's account password
 // scopes: The scopes required for the token
-func (c *aadIdentityClient) authenticateUsernamePassword(ctx context.Context, tenantID string, clientID string, username string, password string, scopes []string) (*azcore.AccessToken, error) {
+func (c *aadIdentityClient) authenticateUsernamePassword(ctx context.Context, tenantID string, clientID string, username string, password string, scopes []string) (*AccessToken, error) {
 	msg, err := c.createUsernamePasswordAuthRequest(tenantID, clientID, username, password, scopes)
 	if err != nil {
 		return nil, fmt.Errorf("AuthenticateUsernamePassword: %w", err)

@@ -7,8 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // ClientCertificateCredential enables authentication of a service principal in to Azure Active Directory using a certificate that is assigned to it's App Registration. More information
@@ -44,6 +42,6 @@ func NewClientCertificateCredential(tenantID string, clientID string, clientCert
 // scopes: The list of scopes for which the token will have access.
 // ctx: controlling the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
-func (c ClientCertificateCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c ClientCertificateCredential) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return c.client.authenticateCertificate(ctx, c.tenantID, c.clientID, c.clientCertificate, scopes)
 }

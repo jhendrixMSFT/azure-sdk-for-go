@@ -13,8 +13,6 @@ There is no guarantee that the credential type used will not change
 import (
 	"context"
 	"fmt"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 const (
@@ -28,7 +26,7 @@ const (
 // - ManagedIdentityCredential
 // Consult the documentation of these credential types for more information on how they attempt authentication.
 type DefaultAzureCredential struct {
-	defaultCredentialChain *[]azcore.TokenCredential
+	defaultCredentialChain *[]TokenCredential
 }
 
 // NewDefaultTokenCredential provides a default ChainedTokenCredential configuration for applications that will be deployed to Azure.  The following credential
@@ -58,9 +56,9 @@ func NewDefaultTokenCredential(o *IdentityClientOptions) (*ChainedTokenCredentia
 }
 
 type credentialNotFoundGuard struct {
-	azcore.TokenCredential
+	TokenCredential
 }
 
-func (c *credentialNotFoundGuard) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
+func (c *credentialNotFoundGuard) GetToken(ctx context.Context, scopes []string) (*AccessToken, error) {
 	return nil, &CredentialUnavailableError{Message: "example"}
 }

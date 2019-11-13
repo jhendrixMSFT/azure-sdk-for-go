@@ -5,8 +5,6 @@ package azidentity
 
 import (
 	"context"
-	"sync"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
@@ -46,55 +44,4 @@ func NewClientSecretCredentialWithPipeline(tenantID string, clientID string, cli
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *ClientSecretCredential) GetToken(ctx context.Context, scopes []string) (*azcore.AccessToken, error) {
 	return c.client.authenticate(ctx, c.tenantID, c.clientID, c.clientSecret, scopes)
-}
-
-// Policy implements the azcore.Credential interface on ClientSecretCredential.
-func (c *ClientSecretCredential) Policy(options azcore.CredentialPolicyOptions) azcore.Policy {
-	return newBearerTokenPolicy(c, options.Scopes)
-}
-
-type bearerTokenPolicy struct {
-	// take lock when manipulating header/expiresOn fields
-	lock      sync.RWMutex
-	header    string
-	expiresOn time.Time
-	creds     azcore.TokenCredential // R/O
-	scopes    []string               // R/O
-}
-
-func newBearerTokenPolicy(creds azcore.TokenCredential, scopes []string) *bearerTokenPolicy {
-	// set the token as expired so first call to Do() refreshes it
-	return &bearerTokenPolicy{creds: creds, scopes: scopes, expiresOn: time.Now().UTC()}
-}
-
-func (b *bearerTokenPolicy) Do(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
-	var bt string
-	// take read lock and check if the token has expired
-	b.lock.RLock()
-	now := time.Now().UTC()
-	if now.Equal(b.expiresOn) || now.After(b.expiresOn) {
-		// token has expired, take the write lock then check again
-		b.lock.RUnlock()
-		// don't defer Unlock(), we want to release it ASAP
-		b.lock.Lock()
-		if now.Equal(b.expiresOn) || now.After(b.expiresOn) {
-			// token has expired, get a new one and update shared state
-			tk, err := b.creds.GetToken(ctx, b.scopes)
-			if err != nil {
-				b.lock.Unlock()
-				return nil, err
-			}
-			b.expiresOn = tk.ExpiresOn
-			b.header = "Bearer " + tk.Token
-		} // else { another go routine already refreshed the token }
-		bt = b.header
-		b.lock.Unlock()
-	} else {
-		// token is still valid
-		bt = b.header
-		b.lock.RUnlock()
-	}
-	// no locks are to be held at this point
-	req.Request.Header.Set(azcore.HeaderAuthorization, bt)
-	return req.Do(ctx)
 }

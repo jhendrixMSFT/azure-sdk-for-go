@@ -9,23 +9,63 @@ import (
 	"strconv"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azstorage"
 )
 
 const (
 	scope = "https://storage.azure.com/.default"
 )
 
+// Credential represents a credential type applicable to clients in azblob.
+type Credential interface {
+	policy() (azcore.Policy, error)
+}
+
+type credentialFunc func() (azcore.Policy, error)
+
+func (c credentialFunc) policy() (azcore.Policy, error) {
+	return c()
+}
+
+// AnonymousCredential is for use with requests to public resources or endpoints with a shared access signature.
+func AnonymousCredential() Credential {
+	return credentialFunc(func() (azcore.Policy, error) {
+		return azcore.AnonymousCredential(), nil
+	})
+}
+
+// SharedKeyCredential is for authenticating using an access key for the specified account.
+func SharedKeyCredential(accountName, accountKey string) Credential {
+	return credentialFunc(func() (azcore.Policy, error) {
+		return azstorage.NewSharedKeyCredential(accountName, accountKey)
+	})
+}
+
+// TokenCredential is for authenticating using an OAuth token.
+func TokenCredential(tk azcore.TokenCredential) Credential {
+	return credentialFunc(func() (azcore.Policy, error) {
+		return azcore.NewBearerTokenPolicy(tk, []string{scope}), nil
+	})
+}
+
 type ServiceClient struct {
 	u *url.URL
 	p azcore.Pipeline
 }
 
-func NewServiceClient(endpoint string, cred azcore.Credential, options azcore.PipelineOptions) (*ServiceClient, error) {
+func NewServiceClient(endpoint string, cred Credential, options azcore.PipelineOptions) (*ServiceClient, error) {
+	if cred == nil {
+		cred = AnonymousCredential()
+	}
+	cp, err := cred.policy()
+	if err != nil {
+		return nil, err
+	}
 	p := azcore.NewPipeline(options.HTTPClient,
 		azcore.NewTelemetryPolicy(options.Telemetry),
 		azcore.NewUniqueRequestIDPolicy(),
 		azcore.NewRetryPolicy(options.Retry),
-		cred.Policy(azcore.CredentialPolicyOptions{Scopes: []string{scope}}),
+		cp,
 		azcore.NewRequestLogPolicy(options.LogOptions))
 	return NewServiceClientWithPipeline(endpoint, p)
 }

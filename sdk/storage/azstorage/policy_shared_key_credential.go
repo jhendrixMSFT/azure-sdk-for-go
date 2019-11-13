@@ -154,25 +154,23 @@ func (c *SharedKeyCredential) buildCanonicalizedResource(u *url.URL) (string, er
 }
 
 // Policy implements the Policy interface on SharedKeyCredential.
-func (c *SharedKeyCredential) Policy(azcore.CredentialPolicyOptions) azcore.Policy {
-	return azcore.PolicyFunc(func(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
-		// Add a x-ms-date header if it doesn't already exist
-		if d := req.Request.Header.Get(azcore.HeaderXmsDate); d == "" {
-			req.Request.Header[azcore.HeaderXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
-		}
-		stringToSign, err := c.buildStringToSign(req.Request)
-		if err != nil {
-			return nil, err
-		}
-		signature := c.ComputeHMACSHA256(stringToSign)
-		authHeader := strings.Join([]string{"SharedKey ", c.AccountName(), ":", signature}, "")
-		req.Request.Header[azcore.HeaderAuthorization] = []string{authHeader}
+func (c *SharedKeyCredential) Do(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
+	// Add a x-ms-date header if it doesn't already exist
+	if d := req.Request.Header.Get(azcore.HeaderXmsDate); d == "" {
+		req.Request.Header[azcore.HeaderXmsDate] = []string{time.Now().UTC().Format(http.TimeFormat)}
+	}
+	stringToSign, err := c.buildStringToSign(req.Request)
+	if err != nil {
+		return nil, err
+	}
+	signature := c.ComputeHMACSHA256(stringToSign)
+	authHeader := strings.Join([]string{"SharedKey ", c.AccountName(), ":", signature}, "")
+	req.Request.Header[azcore.HeaderAuthorization] = []string{authHeader}
 
-		response, err := req.Do(ctx)
-		if err != nil && response != nil && response.StatusCode == http.StatusForbidden {
-			// Service failed to authenticate request, log it
-			azcore.Log().Write(azcore.LogError, "===== HTTP Forbidden status, String-to-Sign:\n"+stringToSign+"\n===============================\n")
-		}
-		return response, err
-	})
+	response, err := req.Do(ctx)
+	if err != nil && response != nil && response.StatusCode == http.StatusForbidden {
+		// Service failed to authenticate request, log it
+		azcore.Log().Write(azcore.LogError, "===== HTTP Forbidden status, String-to-Sign:\n"+stringToSign+"\n===============================\n")
+	}
+	return response, err
 }

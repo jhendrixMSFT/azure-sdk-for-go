@@ -17,27 +17,29 @@ type Service struct{}
 // ListContainersCreateRequest prepares the ListContainersSegment request.
 func (Service) ListContainersCreateRequest(u *url.URL, p azcore.Pipeline, options *ListContainersOptions) *azcore.Request {
 	req := azcore.NewRequest(http.MethodGet, *u)
+	qp := req.URL.Query()
 	if options != nil {
 		if options.Prefix != nil && len(*options.Prefix) > 0 {
-			req.SetQueryParam("prefix", *options.Prefix)
+			qp.Set("prefix", *options.Prefix)
 		}
 		if options.Marker != nil && len(*options.Marker) > 0 {
-			req.SetQueryParam("marker", *options.Marker)
+			qp.Set("marker", *options.Marker)
 		}
 		if options.Maxresults != nil {
-			req.SetQueryParam("maxresults", strconv.FormatInt(int64(*options.Maxresults), 10))
+			qp.Set("maxresults", strconv.FormatInt(int64(*options.Maxresults), 10))
 		}
 		if options.Include != ListContainersIncludeNone {
-			req.SetQueryParam("include", string(options.Include))
+			qp.Set("include", string(options.Include))
 		}
 		if options.Timeout != nil {
-			req.SetQueryParam("timeout", strconv.FormatInt(int64(*options.Timeout), 10))
+			qp.Set("timeout", strconv.FormatInt(int64(*options.Timeout), 10))
 		}
 		if options.RequestID != nil {
 			req.Header.Set("x-ms-client-request-id", *options.RequestID)
 		}
 	}
-	req.SetQueryParam("comp", "list")
+	qp.Set("comp", "list")
+	req.URL.RawQuery = qp.Encode()
 	req.Header.Set("x-ms-version", "2018-11-09")
 	return req
 }

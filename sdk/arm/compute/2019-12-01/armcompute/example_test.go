@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/arm/network/2020-03-01/armnetwork"
@@ -49,6 +50,31 @@ func getVMClient() VirtualMachinesOperations {
 		panic(err)
 	}
 	return vmClient.VirtualMachinesOperations(subscriptionID)
+}
+
+func Test_EndToEnd(t *testing.T) {
+	cred, err := azidentity.NewEnvironmentCredential(nil)
+	if err != nil {
+		/*var cerr *azidentity.CredentialUnavailableError
+		if errors.As(err, &cerr) {
+			t.Logf("CredentialUnavailableError: %v", err)
+		}
+		var aerr *azidentity.AuthenticationFailedError
+		if errors.As(err, &aerr) {
+			t.Logf("AuthenticationFailedError: %v", err)
+		}*/
+		fmt.Println(err.(*azcore.Error).Stack())
+		t.Fatal(err)
+	}
+	vmClient, err := NewDefaultClient(cred, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vmOps := vmClient.VirtualMachinesOperations("subID")
+	_, err = vmOps.BeginCreateOrUpdate(context.Background(), "fake_rg", "vm_name", VirtualMachine{})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func ExampleVirtualMachinesOperations_BeginCreateOrUpdate() {

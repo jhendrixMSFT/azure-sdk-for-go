@@ -7,9 +7,10 @@ package armcompute
 
 import (
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 const scope = "https://management.azure.com//.default"
@@ -86,10 +87,10 @@ func NewClient(endpoint string, cred azcore.Credential, options *ClientOptions) 
 func NewClientWithPipeline(endpoint string, p azcore.Pipeline) (*Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, err
+		return nil, azcore.NewError(err, nil)
 	}
 	if u.Scheme == "" {
-		return nil, fmt.Errorf("no scheme detected in endpoint %s", endpoint)
+		return nil, azcore.NewError(fmt.Errorf("no scheme detected in endpoint %s", endpoint), nil)
 	}
 	return &Client{u: u, p: p}, nil
 }

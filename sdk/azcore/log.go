@@ -10,7 +10,7 @@ type LogClassification string
 
 const (
 	// LogError entries contain detailed error information.
-	// This includes the error message and stack trace.
+	// This includes the error message and stack frame where the error happened.
 	LogError LogClassification = "Error"
 
 	// LogRequest entries contain information about HTTP requests.
@@ -26,6 +26,9 @@ const (
 
 	// LogSlowResponse entries contain information for responses that take longer than the specified threshold.
 	LogSlowResponse LogClassification = "SlowResponse"
+
+	// LogStackTrace includes full stack traces in errors.
+	LogStackTrace LogClassification = "StackTrace"
 )
 
 // Listener is the function signature invoked when writing log entries.

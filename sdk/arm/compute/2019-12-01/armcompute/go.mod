@@ -9,6 +9,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/to v0.1.0
 )
 
+replace github.com/Azure/azure-sdk-for-go/sdk/azcore => ../../../../azcore
 replace github.com/Azure/azure-sdk-for-go/sdk/azidentity => ../../../../azidentity
-
 replace github.com/Azure/azure-sdk-for-go/sdk/arm/network/2020-03-01/armnetwork => ../../../network/2020-03-01/armnetwork

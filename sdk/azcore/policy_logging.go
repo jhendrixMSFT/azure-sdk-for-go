@@ -11,9 +11,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strings"
 	"time"
+
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
 )
 
 // RequestLogOptions configures the retry policy's behavior.
@@ -111,7 +112,7 @@ func (p *requestLogPolicy) Do(ctx context.Context, req *Request) (*Response, err
 
 		WriteRequestWithResponse(b, prepareRequestForLogging(req), response, err)
 		if logClass == LogError {
-			b.WriteString(stack()) // For errors (or lower levels), we append the stack trace (an expensive operation)
+			b.WriteString(azruntime.StackTrace(2, StackFrameCount)) // For errors (or lower levels), we append the stack trace (an expensive operation)
 		}
 		Log().Write(logClass, b.String())
 	}
@@ -146,25 +147,4 @@ func prepareRequestForLogging(req *Request) *Request {
 		request.URL.RawQuery = rawQuery
 	}
 	return request
-}
-
-func stack() string {
-	sb := strings.Builder{}
-	// limit to 32 frames
-	pcCallers := make([]uintptr, 32)
-	// skip the call to get the stack, ourselves, and the azcore.NewError func
-	runtime.Callers(3, pcCallers)
-	frames := runtime.CallersFrames(pcCallers)
-	for {
-		frame, more := frames.Next()
-		sb.WriteString(frame.Function)
-		sb.WriteString("()\n\t")
-		sb.WriteString(frame.File)
-		sb.WriteRune(':')
-		sb.WriteString(fmt.Sprintf("%d\n", frame.Line))
-		if !more {
-			break
-		}
-	}
-	return sb.String()
 }

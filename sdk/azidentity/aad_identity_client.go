@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
 )
 
 const (
@@ -83,7 +84,7 @@ func (c *aadIdentityClient) refreshAccessToken(ctx context.Context, tenantID str
 		return c.createRefreshAccessToken(resp)
 	}
 
-	return nil, azcore.NewError(&AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)}, nil)
+	return nil, newStackError(&AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)})
 }
 
 // authenticate creates a client secret authentication request and returns the resulting Access Token or
@@ -108,7 +109,11 @@ func (c *aadIdentityClient) authenticate(ctx context.Context, tenantID string, c
 		return c.createAccessToken(resp)
 	}
 
-	return nil, azcore.NewError(&AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)}, resp.Response)
+	//return nil, newStackError(&AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)})
+	return nil, azruntime.NewStackError(&AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)},
+		azcore.Log().Should(azcore.LogStackTrace),
+		0,
+		azcore.StackFrameCount)
 }
 
 // authenticateCertificate creates a client certificate authentication request and returns an Access Token or
@@ -143,11 +148,11 @@ func (c *aadIdentityClient) createAccessToken(res *azcore.Response) (*azcore.Acc
 		ExpiresOn string      `json:"expires_on"`
 	}{}
 	if err := res.UnmarshalAsJSON(&value); err != nil {
-		return nil, azcore.NewError(err, res.Response)
+		return nil, azruntime.NewWrappedError(err, newStackError(azcore.NewRequestError(res.Response)))
 	}
 	t, err := value.ExpiresIn.Int64()
 	if err != nil {
-		return nil, azcore.NewError(err, res.Response)
+		return nil, azruntime.NewWrappedError(err, newStackError(azcore.NewRequestError(res.Response)))
 	}
 	return &azcore.AccessToken{
 		Token:     value.Token,
@@ -165,11 +170,11 @@ func (c *aadIdentityClient) createRefreshAccessToken(res *azcore.Response) (*tok
 		ExpiresOn    string      `json:"expires_on"`
 	}{}
 	if err := res.UnmarshalAsJSON(&value); err != nil {
-		return nil, azcore.NewError(err, res.Response)
+		return nil, azruntime.NewWrappedError(err, newStackError(azcore.NewRequestError(res.Response)))
 	}
 	t, err := value.ExpiresIn.Int64()
 	if err != nil {
-		return nil, azcore.NewError(err, res.Response)
+		return nil, azruntime.NewWrappedError(err, newStackError(azcore.NewRequestError(res.Response)))
 	}
 	accessToken := &azcore.AccessToken{
 		Token:     value.Token,
@@ -195,7 +200,7 @@ func (c *aadIdentityClient) createRefreshTokenRequest(tenantID, clientID, client
 	msg.Header.Set(azcore.HeaderContentType, azcore.HeaderURLEncoded)
 	err := msg.SetBody(body)
 	if err != nil {
-		return nil, azcore.NewError(err, nil)
+		return nil, newStackError(err)
 	}
 
 	return msg, nil
@@ -213,7 +218,7 @@ func (c *aadIdentityClient) createClientSecretAuthRequest(tenantID string, clien
 	msg.Header.Set(azcore.HeaderContentType, azcore.HeaderURLEncoded)
 	err := msg.SetBody(body)
 	if err != nil {
-		return nil, azcore.NewError(err, nil)
+		return nil, newStackError(err)
 	}
 
 	return msg, nil
@@ -238,7 +243,7 @@ func (c *aadIdentityClient) createClientCertificateAuthRequest(tenantID string, 
 
 	err = msg.SetBody(body)
 	if err != nil {
-		return nil, azcore.NewError(err, nil)
+		return nil, newStackError(err)
 	}
 	return msg, nil
 }
@@ -291,7 +296,7 @@ func (c *aadIdentityClient) createUsernamePasswordAuthRequest(tenantID string, c
 func createDeviceCodeResult(res *azcore.Response) (*deviceCodeResult, error) {
 	value := &deviceCodeResult{}
 	if err := res.UnmarshalAsJSON(&value); err != nil {
-		return nil, azcore.NewError(err, res.Response)
+		return nil, azruntime.NewWrappedError(err, newStackError(azcore.NewRequestError(res.Response)))
 	}
 	return value, nil
 }

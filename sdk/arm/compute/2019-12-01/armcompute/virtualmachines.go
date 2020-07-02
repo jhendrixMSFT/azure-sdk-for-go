@@ -9,13 +9,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
 )
 
 // VirtualMachinesOperations contains the methods for the VirtualMachines group.
@@ -326,12 +328,13 @@ func (client *virtualMachinesOperations) createOrUpdateHandleResponse(resp *azco
 func (client *virtualMachinesOperations) createOrUpdateHandleError(resp *azcore.Response) error {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("%s; failed to read response body: %w", resp.Status, err)
+		return azruntime.NewWrappedError(err, azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount))
 	}
 	if len(body) == 0 {
-		return errors.New(resp.Status)
+		return azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 	}
-	return errors.New(string(body))
+	return azruntime.NewStackError(azruntime.NewWrappedError(errors.New(string(body)), azcore.NewRequestError(resp.Response)), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
+	//return azruntime.NewWrappedError(azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount), errors.New(string(body)))
 }
 
 // Deallocate - Shuts down the virtual machine and releases the compute resources. You are not billed for the compute resources that this virtual machine uses.

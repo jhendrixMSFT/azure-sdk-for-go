@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
 )
 
 // LogCredential is the log classification that can be used for logging Azure Identity related information
@@ -73,4 +74,8 @@ func logMSIEnv(msi msiType) string {
 func addGetTokenFailureLogs(credName string, err error) {
 	azcore.Log().Write(azcore.LogError, logCredentialError(credName, err))
 	azcore.Log().Write(azcore.LogError, logGetTokenFailure(credName))
+}
+
+func newStackError(inner error) error {
+	return azruntime.NewStackError(inner, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 }

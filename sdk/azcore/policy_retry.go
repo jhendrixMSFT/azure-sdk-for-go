@@ -7,6 +7,7 @@ package azcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -168,7 +169,9 @@ func (p *retryPolicy) Do(ctx context.Context, req *Request) (resp *Response, err
 		} else if ctx.Err() != nil {
 			// don't retry if the parent context has been cancelled or its deadline exceeded
 			return
-		} else if retrier, ok := err.(Retrier); ok && retrier.IsNotRetriable() {
+		}
+		var retrier Retrier
+		if errors.As(err, &retrier) && retrier.IsNotRetriable() {
 			// the error says it's not retriable so don't retry
 			return
 		}

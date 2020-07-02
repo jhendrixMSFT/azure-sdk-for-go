@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
 )
 
 const scope = "https://management.azure.com//.default"
@@ -87,10 +88,10 @@ func NewClient(endpoint string, cred azcore.Credential, options *ClientOptions) 
 func NewClientWithPipeline(endpoint string, p azcore.Pipeline) (*Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, azcore.NewError(err, nil)
+		return nil, azruntime.NewStackError(err, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 	}
 	if u.Scheme == "" {
-		return nil, azcore.NewError(fmt.Errorf("no scheme detected in endpoint %s", endpoint), nil)
+		return nil, azruntime.NewStackError(fmt.Errorf("no scheme detected in endpoint %s", endpoint), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 	}
 	return &Client{u: u, p: p}, nil
 }

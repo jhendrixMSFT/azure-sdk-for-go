@@ -137,7 +137,7 @@ func (c *TokenCredentialOptions) setDefaultValues() (*TokenCredentialOptions, er
 	if c == nil {
 		defaultAuthorityHostURL, err := url.Parse(authorityHost)
 		if err != nil {
-			return nil, azcore.NewError(err, nil)
+			return nil, newStackError(err)
 		}
 		c = &TokenCredentialOptions{AuthorityHost: defaultAuthorityHostURL}
 	}
@@ -145,7 +145,7 @@ func (c *TokenCredentialOptions) setDefaultValues() (*TokenCredentialOptions, er
 	if c.AuthorityHost == nil {
 		defaultAuthorityHostURL, err := url.Parse(authorityHost)
 		if err != nil {
-			return nil, azcore.NewError(err, nil)
+			return nil, newStackError(err)
 		}
 		c.AuthorityHost = defaultAuthorityHostURL
 	}

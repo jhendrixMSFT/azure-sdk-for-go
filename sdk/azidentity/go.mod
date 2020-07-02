@@ -8,3 +8,5 @@ require (
 )
 
 replace github.com/Azure/azure-sdk-for-go/sdk/azcore => ../azcore
+
+replace github.com/Azure/azure-sdk-for-go/sdk/internal => ../internal

@@ -5,6 +5,7 @@ package armcompute
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -53,17 +54,16 @@ func getVMClient() VirtualMachinesOperations {
 }
 
 func Test_EndToEnd(t *testing.T) {
+	// TODO: this has to be documented, maybe it belongs in azcore
+	type stackTracer interface {
+		StackTrace() string
+	}
 	cred, err := azidentity.NewEnvironmentCredential(nil)
 	if err != nil {
-		/*var cerr *azidentity.CredentialUnavailableError
-		if errors.As(err, &cerr) {
-			t.Logf("CredentialUnavailableError: %v", err)
+		var st stackTracer
+		if errors.As(err, &st) {
+			fmt.Println(st.StackTrace())
 		}
-		var aerr *azidentity.AuthenticationFailedError
-		if errors.As(err, &aerr) {
-			t.Logf("AuthenticationFailedError: %v", err)
-		}*/
-		fmt.Println(err.(*azcore.Error).Stack())
 		t.Fatal(err)
 	}
 	vmClient, err := NewDefaultClient(cred, nil)
@@ -73,6 +73,14 @@ func Test_EndToEnd(t *testing.T) {
 	vmOps := vmClient.VirtualMachinesOperations("subID")
 	_, err = vmOps.BeginCreateOrUpdate(context.Background(), "fake_rg", "vm_name", VirtualMachine{})
 	if err != nil {
+		var st stackTracer
+		if errors.As(err, &st) {
+			fmt.Println(st.StackTrace())
+		}
+		var re *azcore.RequestError
+		if errors.As(err, &re) {
+			fmt.Println(re.Response.StatusCode)
+		}
 		t.Fatal(err)
 	}
 }

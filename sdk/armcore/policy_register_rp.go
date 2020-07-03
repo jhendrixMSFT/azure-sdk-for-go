@@ -13,36 +13,52 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // RegistrationOptions configures the registration policy's behavior.
 type RegistrationOptions struct {
-	// DisableAutoRegistration will skip automatic registration of a resource provider.
+	// Disabled will skip automatic registration of a resource provider.
 	// The default value is false.
-	DisableAutoRegistration bool
+	Disabled bool
+
+	// Attempts is the total number of times to attempt automatic registration
+	// in the event that an attempt fails.
+	// The default value is 3.
+	Attempts int
+
+	// PollingDelay is the amount of time to sleep between polling intervals.
+	// The default value is 15 seconds.
+	PollingDelay time.Duration
+
+	// PollingDuration is the amount of time to wait before abandoning polling.
+	// The default valule is 5 minutes.
+	PollingDuration time.Duration
 }
 
 // DefaultRegistrationOptions returns an instance of RegistrationOptions initialized with default values.
 func DefaultRegistrationOptions() RegistrationOptions {
-	return RegistrationOptions{}
+	return RegistrationOptions{
+		Attempts:     3,
+		PollingDelay: 15 * time.Second,
+	}
 }
 
 // NewRPRegistrationPolicy creates a policy object configured using the specified pipeline
 // and options. Pass nil to accept the default options; this is the same as passing the result
 // from a call to DefaultRegistrationOptions().
-func NewRPRegistrationPolicy(p azcore.Pipeline, o *RegistrationOptions) azcore.Policy {
+func NewRPRegistrationPolicy(o *RegistrationOptions) azcore.Policy {
 	if o == nil {
 		def := DefaultRegistrationOptions()
 		o = &def
 	}
-	return &rpRegistrationPolicy{pipeline: p, options: *o}
+	return &rpRegistrationPolicy{options: *o}
 }
 
 type rpRegistrationPolicy struct {
-	pipeline azcore.Pipeline
-	options  RegistrationOptions
+	options RegistrationOptions
 }
 
 func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
@@ -52,7 +68,7 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 	for {
 		resp, err := req.Next(ctx)
 		// getting a 409 is the first indication that the RP might need to be registered, check error response
-		if err != nil || resp.StatusCode != http.StatusConflict || r.options.DisableAutoRegistration {
+		if err != nil || resp.StatusCode != http.StatusConflict || r.options.Disabled {
 			return resp, err
 		}
 		var reqErr requestError
@@ -82,7 +98,7 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 		}
 		// create client and make the registration request
 		rpOps := &providersOperations{
-			p:     r.pipeline,
+			p:     req.Pipeline(),
 			u:     req.URL,
 			subID: subID,
 		}

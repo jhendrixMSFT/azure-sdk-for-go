@@ -36,7 +36,6 @@ const (
 // Request is an abstraction over the creation of an HTTP request as it passes through the pipeline.
 type Request struct {
 	*http.Request
-	p        Pipeline
 	policies []Policy
 	values   opValues
 }
@@ -76,11 +75,6 @@ func NewRequest(httpMethod string, endpoint url.URL) *Request {
 			Host:       endpoint.Host,
 		},
 	}
-}
-
-// Pipeline returns the pipeline associated with the request.
-func (req *Request) Pipeline() Pipeline {
-	return req.p
 }
 
 // Next calls the next policy in the pipeline.

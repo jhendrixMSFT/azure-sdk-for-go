@@ -80,7 +80,6 @@ func NewPipeline(transport Transport, policies ...Policy) Pipeline {
 // all the Policy objects (which can transform the Request's URL/query parameters/headers)
 // and ultimately sends the transformed HTTP request over the network.
 func (p Pipeline) Do(ctx context.Context, req *Request) (*Response, error) {
-	req.p = p
 	req.policies = p.policies
 	return req.Next(ctx)
 }

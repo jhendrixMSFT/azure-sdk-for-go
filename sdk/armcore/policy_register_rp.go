@@ -16,14 +16,18 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/internal/runtime"
+)
+
+const scope = "https://management.azure.com//.default"
+
+var (
+	// ErrRPRegistrationFailed is the error returned when the RP registration policy fails to register a resource provider.
+	ErrRPRegistrationFailed = errors.New("failed to register resource provider")
 )
 
 // RegistrationOptions configures the registration policy's behavior.
 type RegistrationOptions struct {
-	// Disabled will skip automatic registration of a resource provider.
-	// The default value is false.
-	Disabled bool
-
 	// Attempts is the total number of times to attempt automatic registration
 	// in the event that an attempt fails.
 	// The default value is 3.
@@ -36,93 +40,112 @@ type RegistrationOptions struct {
 	// PollingDuration is the amount of time to wait before abandoning polling.
 	// The default valule is 5 minutes.
 	PollingDuration time.Duration
+
+	// HTTPClient sets the transport for making HTTP requests.
+	HTTPClient azcore.Transport
+
+	// LogOptions configures the built-in request logging policy behavior.
+	LogOptions azcore.RequestLogOptions
+
+	// Retry configures the built-in retry policy behavior.
+	Retry azcore.RetryOptions
 }
 
 // DefaultRegistrationOptions returns an instance of RegistrationOptions initialized with default values.
 func DefaultRegistrationOptions() RegistrationOptions {
 	return RegistrationOptions{
-		Attempts:     3,
-		PollingDelay: 15 * time.Second,
+		Attempts:        3,
+		PollingDelay:    15 * time.Second,
+		PollingDuration: 5 * time.Minute,
 	}
 }
 
 // NewRPRegistrationPolicy creates a policy object configured using the specified pipeline
 // and options. Pass nil to accept the default options; this is the same as passing the result
 // from a call to DefaultRegistrationOptions().
-func NewRPRegistrationPolicy(o *RegistrationOptions) azcore.Policy {
+func NewRPRegistrationPolicy(cred azcore.Credential, o *RegistrationOptions) azcore.Policy {
 	if o == nil {
 		def := DefaultRegistrationOptions()
 		o = &def
 	}
-	return &rpRegistrationPolicy{options: *o}
+	p := azcore.NewPipeline(o.HTTPClient,
+		azcore.NewUniqueRequestIDPolicy(),
+		azcore.NewRetryPolicy(&o.Retry),
+		cred.AuthenticationPolicy(azcore.AuthenticationPolicyOptions{Options: azcore.TokenRequestOptions{Scopes: []string{scope}}}),
+		azcore.NewRequestLogPolicy(o.LogOptions))
+	return &rpRegistrationPolicy{pipeline: p, options: *o}
 }
 
 type rpRegistrationPolicy struct {
-	options RegistrationOptions
+	pipeline azcore.Pipeline
+	options  RegistrationOptions
 }
 
 func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*azcore.Response, error) {
 	const unregisteredRPCode = "MissingSubscriptionRegistration"
 	const registeredState = "Registered"
-	// TODO: cap
-	for {
+	for attempts := 0; attempts < r.options.Attempts; attempts++ {
+		// make the original request
 		resp, err := req.Next(ctx)
 		// getting a 409 is the first indication that the RP might need to be registered, check error response
-		if err != nil || resp.StatusCode != http.StatusConflict || r.options.Disabled {
+		if err != nil || resp.StatusCode != http.StatusConflict {
 			return resp, err
 		}
 		var reqErr requestError
 		if err = resp.UnmarshalAsJSON(&reqErr); err != nil {
-			// TODO: stack trace
-			return resp, err
+			return resp, newFrameError(err)
 		}
 		if reqErr.ServiceError == nil {
-			// TODO: stack trace
-			return resp, errors.New("unexpected nil error")
+			return resp, newFrameError(errors.New("unexpected nil error"))
 		}
-		if reqErr.ServiceError.Code != unregisteredRPCode {
+		if !strings.EqualFold(reqErr.ServiceError.Code, unregisteredRPCode) {
 			// not a 409 due to unregistered RP
 			return resp, err
 		}
 		// RP needs to be registered.  start by getting the subscription ID from the original request
 		subID, err := getSubscription(req.URL.Path)
 		if err != nil {
-			// TODO: stack trace
-			return resp, err
+			return resp, newFrameError(err)
 		}
 		// now get the RP from the error
 		rp, err := getProvider(reqErr)
 		if err != nil {
-			// TODO: stack trace
-			return resp, err
+			return resp, newFrameError(err)
 		}
 		// create client and make the registration request
 		rpOps := &providersOperations{
-			p:     req.Pipeline(),
+			p:     r.pipeline,
 			u:     req.URL,
 			subID: subID,
 		}
-		_, err = rpOps.Register(ctx, rp)
-		if err != nil {
-			// TODO: should we return the response from Register?  both responses (how)?
-			// TODO: stack trace
-			return resp, err
-		}
-		// RP was registered, however we need to wait for the registration to complete
-		// TODO: cap
+		pollCtx, pollCancel := context.WithTimeout(ctx, r.options.PollingDuration)
+		registered := false
 		for {
-			getResp, err := rpOps.Get(ctx, rp)
-			if err != nil {
-				// TODO: should we return the response from Register?  both responses (how)?
-				// TODO: stack trace
-				return resp, err
+			if !registered {
+				if _, err = rpOps.Register(ctx, rp); err == nil {
+					// don't retry registration once it succeeds
+					registered = true
+				}
 			}
-			if getResp.Provider.RegistrationState != nil && *getResp.Provider.RegistrationState == registeredState {
-				// registration complete
-				break
+			if registered {
+				// RP was registered, however we need to wait for the registration to complete
+				if getResp, err := rpOps.Get(pollCtx, rp); err == nil {
+					if getResp.Provider.RegistrationState != nil && strings.EqualFold(*getResp.Provider.RegistrationState, registeredState) {
+						// registration complete
+						break
+					}
+				}
 			}
-			// TODO: sleep
+			// wait before trying again
+			select {
+			case <-time.After(r.options.PollingDelay):
+				// continue polling
+			case <-pollCtx.Done():
+				pollCancel()
+				return resp, pollCtx.Err()
+			}
 		}
+		pollCancel()
 		// RP was successfully registered, retry the original request
 		err = req.RewindBody()
 		if err != nil {
@@ -130,6 +153,13 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 			return resp, err
 		}
 	}
+	// if we get here it means we exceeded the number of attempts
+	return nil, ErrRPRegistrationFailed
+}
+
+func newFrameError(inner error) error {
+	// skip ourselves
+	return azruntime.NewFrameError(inner, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 }
 
 func getSubscription(path string) (string, error) {
@@ -146,12 +176,12 @@ func getProvider(re requestError) (string, error) {
 	if len(re.ServiceError.Details) > 0 {
 		return re.ServiceError.Details[0].Target, nil
 	}
-	return "", errors.New("provider was not found in the response")
+	return "", errors.New("unexpected empty Details")
 }
 
 // minimal error definitions to simplify detection
 type requestError struct {
-	ServiceError *serviceError `json:"error`
+	ServiceError *serviceError `json:"error"`
 }
 
 type serviceError struct {
@@ -164,8 +194,10 @@ type serviceErrorDetails struct {
 	Target string `json:"target"`
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////
 // the following code was copied from module armresources, providers.go and models.go
 // only the minimum amount of code was copied to get this working and some edits were made.
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 type providersOperations struct {
 	p     azcore.Pipeline

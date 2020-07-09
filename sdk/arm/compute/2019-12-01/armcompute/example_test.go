@@ -54,16 +54,8 @@ func getVMClient() VirtualMachinesOperations {
 }
 
 func Test_EndToEnd(t *testing.T) {
-	// TODO: this has to be documented, maybe it belongs in azcore
-	type stackTracer interface {
-		StackTrace() string
-	}
 	cred, err := azidentity.NewEnvironmentCredential(nil)
 	if err != nil {
-		var st stackTracer
-		if errors.As(err, &st) {
-			fmt.Println(st.StackTrace())
-		}
 		t.Fatal(err)
 	}
 	vmClient, err := NewDefaultClient(cred, nil)
@@ -73,13 +65,9 @@ func Test_EndToEnd(t *testing.T) {
 	vmOps := vmClient.VirtualMachinesOperations("subID")
 	_, err = vmOps.BeginCreateOrUpdate(context.Background(), "fake_rg", "vm_name", VirtualMachine{})
 	if err != nil {
-		var st stackTracer
-		if errors.As(err, &st) {
-			fmt.Println(st.StackTrace())
-		}
-		var re *azcore.RequestError
+		var re azcore.Responder
 		if errors.As(err, &re) {
-			fmt.Println(re.Response.StatusCode)
+			fmt.Printf("status code is %d\n", re.Response().StatusCode)
 		}
 		t.Fatal(err)
 	}

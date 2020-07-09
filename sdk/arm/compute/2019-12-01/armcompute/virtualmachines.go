@@ -328,13 +328,12 @@ func (client *virtualMachinesOperations) createOrUpdateHandleResponse(resp *azco
 func (client *virtualMachinesOperations) createOrUpdateHandleError(resp *azcore.Response) error {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return azruntime.NewWrappedError(err, azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount))
+		return azruntime.NewFrameError(err, azcore.Log().Should(azcore.LogStackTrace), 0, azcore.StackFrameCount)
 	}
 	if len(body) == 0 {
-		return azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
+		return azruntime.NewFrameError(azruntime.NewRequestError(errors.New(resp.Status), resp.Response), azcore.Log().Should(azcore.LogStackTrace), 0, azcore.StackFrameCount)
 	}
-	return azruntime.NewStackError(azruntime.NewWrappedError(errors.New(string(body)), azcore.NewRequestError(resp.Response)), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
-	//return azruntime.NewWrappedError(azruntime.NewStackError(azcore.NewRequestError(resp.Response), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount), errors.New(string(body)))
+	return azruntime.NewFrameError(azruntime.NewRequestError(errors.New(string(body)), resp.Response), azcore.Log().Should(azcore.LogStackTrace), 0, azcore.StackFrameCount)
 }
 
 // Deallocate - Shuts down the virtual machine and releases the compute resources. You are not billed for the compute resources that this virtual machine uses.

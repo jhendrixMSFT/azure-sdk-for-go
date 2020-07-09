@@ -77,5 +77,6 @@ func addGetTokenFailureLogs(credName string, err error) {
 }
 
 func newStackError(inner error) error {
-	return azruntime.NewStackError(inner, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
+	// skip ourselves
+	return azruntime.NewFrameError(inner, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 }

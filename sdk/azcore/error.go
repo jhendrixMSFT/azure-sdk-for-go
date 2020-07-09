@@ -22,16 +22,10 @@ var (
 	StackFrameCount = 32
 )
 
-// NewRequestError returns a new instance of the RequestError type.
-func NewRequestError(resp *http.Response) error {
-	return azruntime.NewStackError(&RequestError{Response: resp}, Log().Should(LogStackTrace), 1, StackFrameCount)
+// Responder provides access to an HTTP response if available.
+// Errors returned from failed API calls will implement this interface.
+type Responder interface {
+	Response() *http.Response
 }
 
-type RequestError struct {
-	Response *http.Response
-}
-
-// Error implements the error interface for type Error.
-func (e *RequestError) Error() string {
-	return e.Response.Status
-}
+var _ Responder = (*azruntime.RequestError)(nil)

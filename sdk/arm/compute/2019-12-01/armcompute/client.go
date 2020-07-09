@@ -88,10 +88,10 @@ func NewClient(endpoint string, cred azcore.Credential, options *ClientOptions) 
 func NewClientWithPipeline(endpoint string, p azcore.Pipeline) (*Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return nil, azruntime.NewStackError(err, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
+		return nil, azruntime.NewFrameError(err, azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 	}
 	if u.Scheme == "" {
-		return nil, azruntime.NewStackError(fmt.Errorf("no scheme detected in endpoint %s", endpoint), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
+		return nil, azruntime.NewFrameError(fmt.Errorf("no scheme detected in endpoint %s", endpoint), azcore.Log().Should(azcore.LogStackTrace), 1, azcore.StackFrameCount)
 	}
 	return &Client{u: u, p: p}, nil
 }

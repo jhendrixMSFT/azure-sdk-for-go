@@ -118,6 +118,7 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 		}
 		azcore.Log().Write(LogRPRegistration, fmt.Sprintf("begin registration for %s", rp))
 		// create client and make the registration request
+		// we use the scheme and host from the original request
 		rpOps := &providersOperations{
 			p: r.pipeline,
 			u: &url.URL{

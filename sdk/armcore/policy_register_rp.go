@@ -43,12 +43,14 @@ type RegistrationOptions struct {
 	PollingDuration time.Duration
 
 	// HTTPClient sets the transport for making HTTP requests.
+	// Defaults to azcore.DefaultHTTPClientTransport()
 	HTTPClient azcore.Transport
 
 	// LogOptions configures the built-in request logging policy behavior.
 	LogOptions azcore.RequestLogOptions
 
 	// Retry configures the built-in retry policy behavior.
+	// Defaults to azcore.DefaultRetryOptions()
 	Retry azcore.RetryOptions
 }
 
@@ -88,9 +90,11 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 	const unregisteredRPCode = "MissingSubscriptionRegistration"
 	const registeredState = "Registered"
 	var rp string
+	var resp *azcore.Response
 	for attempts := 0; attempts < r.options.Attempts; attempts++ {
+		var err error
 		// make the original request
-		resp, err := req.Next(ctx)
+		resp, err = req.Next(ctx)
 		// getting a 409 is the first indication that the RP might need to be registered, check error response
 		if err != nil || resp.StatusCode != http.StatusConflict {
 			return resp, err
@@ -100,7 +104,7 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 			return resp, newFrameError(err)
 		}
 		if reqErr.ServiceError == nil {
-			return resp, newFrameError(errors.New("unexpected nil error"))
+			return resp, newFrameError(errors.New("missing error information"))
 		}
 		if !strings.EqualFold(reqErr.ServiceError.Code, unregisteredRPCode) {
 			// not a 409 due to unregistered RP
@@ -166,7 +170,7 @@ func (r *rpRegistrationPolicy) Do(ctx context.Context, req *azcore.Request) (*az
 		}
 	}
 	// if we get here it means we exceeded the number of attempts
-	return nil, fmt.Errorf("exceeded attempts to register %s", rp)
+	return resp, fmt.Errorf("exceeded attempts to register %s", rp)
 }
 
 func newFrameError(inner error) error {

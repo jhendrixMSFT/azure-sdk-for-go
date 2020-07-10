@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -207,9 +208,56 @@ func TestRPRegistrationPolicyTimesOut(t *testing.T) {
 	}
 }
 
-// test registration hits cap and fails
 func TestRPRegistrationPolicyExceedsAttempts(t *testing.T) {
-
+	srv, close := mock.NewServer()
+	defer close()
+	// add a cycle of unregistered->registered so that we keep retrying and hit the cap
+	for i := 0; i < 4; i++ {
+		// initial response that RP is unregistered
+		srv.AppendResponse(mock.WithStatusCode(http.StatusConflict), mock.WithBody([]byte(rpUnregisteredResp)))
+		// polling responses to Register() and Get(), in progress
+		srv.RepeatResponse(2, mock.WithStatusCode(http.StatusOK), mock.WithBody([]byte(rpRegisteringResp)))
+		// polling response, successful registration
+		srv.AppendResponse(mock.WithStatusCode(http.StatusOK), mock.WithBody([]byte(rpRegisteredResp)))
+	}
+	pl := azcore.NewPipeline(srv, NewRPRegistrationPolicy(azcore.AnonymousCredential(), testRPRegistrationOptions(srv)))
+	u1 := srv.URL()
+	u2 := &u1
+	u2, err := u2.Parse(requestEndpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := azcore.NewRequest(http.MethodGet, *u2)
+	// log only RP registration
+	azcore.Log().SetClassifications(LogRPRegistration)
+	defer func() {
+		// reset logging
+		azcore.Log().SetClassifications()
+	}()
+	logEntries := 0
+	azcore.Log().SetListener(func(cls azcore.LogClassification, msg string) {
+		logEntries++
+	})
+	resp, err := pl.Do(context.Background(), req)
+	if err == nil {
+		t.Fatal("unexpected nil error")
+	}
+	if !strings.HasPrefix(err.Error(), "exceeded attempts to register Microsoft.Storage") {
+		t.Fatalf("unexpected error message %s", err.Error())
+	}
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("unexpected status code %d:", resp.StatusCode)
+	}
+	if resp.Request.URL.Path != requestEndpoint {
+		t.Fatalf("unexpected path in response %s", resp.Request.URL.Path)
+	}
+	// should be 3 entries for each attempt, total 9 entries
+	// 1st is for start
+	// 2nd is for first response to get state
+	// 3rd is when state transitions to success
+	if logEntries != 9 {
+		t.Fatalf("expected 9 log entries, got %d", logEntries)
+	}
 }
 
 // test cancelling registration

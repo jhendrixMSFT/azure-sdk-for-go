@@ -342,7 +342,7 @@ type ProviderResponse struct {
 	RawResponse *http.Response
 }
 
-// Resource provider information.
+// Provider - Resource provider information.
 type Provider struct {
 	// The provider ID.
 	ID *string `json:"id,omitempty"`

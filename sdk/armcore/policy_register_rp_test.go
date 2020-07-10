@@ -33,7 +33,7 @@ const rpUnregisteredResp = `{
 
 // some content was omitted here as it's not relevant
 const rpRegisteringResp = `{
-    "id": "/subscriptions/6d3860f6-8a11-431d-b3fa-1b3c4a8b888a/providers/Microsoft.Storage",
+    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Storage",
     "namespace": "Microsoft.Storage",
     "registrationState": "Registering",
     "registrationPolicy": "RegistrationRequired"
@@ -41,7 +41,7 @@ const rpRegisteringResp = `{
 
 // some content was omitted here as it's not relevant
 const rpRegisteredResp = `{
-    "id": "/subscriptions/6d3860f6-8a11-431d-b3fa-1b3c4a8b888a/providers/Microsoft.Storage",
+    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Storage",
     "namespace": "Microsoft.Storage",
     "registrationState": "Registered",
     "registrationPolicy": "RegistrationRequired"

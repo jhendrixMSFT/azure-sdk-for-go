@@ -23,7 +23,7 @@ const DefaultEndpoint = original.DefaultEndpoint
 
 // NewDefaultClient creates an instance of the Client type using the DefaultEndpoint.
 func NewDefaultClient(cred azcore.Credential, options *ClientOptions) *Client {
-	return original.NewClient(cred)
+	return original.NewDefaultClient(cred, options)
 }
 
 // NewClient creates an instance of the Client type with the specified endpoint.

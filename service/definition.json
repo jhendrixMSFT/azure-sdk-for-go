@@ -1,0 +1,22 @@
+{
+  "include": [
+    "../sdk/arm/appconfiguration/2019-10-01/armappconfiguration",
+    "../sdk/arm/compute/2019-12-01/armcompute",
+    "../sdk/arm/eventhub/2017-04-01/armeventhub",
+    "../sdk/arm/keyvault/2018-02-14/armkeyvault",
+    "../sdk/arm/monitor/2019-06-01/armmonitor",
+    "../sdk/arm/network/2020-03-01/armnetwork",
+    "../sdk/arm/resources/2019-05-01/armresources",
+    "../sdk/arm/storage/2019-06-01/armstorage"
+  ],
+  "pathOverride": {
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/appconfiguration/2019-10-01/armappconfiguration": "armappconfiguration",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/compute/2019-12-01/armcompute": "armcompute",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/eventhub/2017-04-01/armeventhub": "armeventhub",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/keyvault/2018-02-14/armkeyvault": "armkeyvault",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/monitor/2019-06-01/armmonitor": "armmonitor",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/network/2020-03-01/armnetwork": "armnetwork",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/resources/2019-05-01/armresources": "armresources",
+    "github.com/Azure/azure-sdk-for-go/sdk/arm/storage/2019-06-01/armstorage": "armstorage"
+  }
+}

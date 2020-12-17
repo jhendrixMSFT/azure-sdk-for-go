@@ -195,36 +195,36 @@ func (client Client) CreatePreparer(ctx context.Context, resourceGroupName strin
 
 // CreateSender sends the Create request. The method will close the
 // http.Response Body if it receives an error.
-func (client Client) CreateSender(req *http.Request) (CreateFuture, error) {
+func (client Client) CreateSender(req *http.Request) (future CreateFuture, err error) {
 	var resp *http.Response
-	resp, err := client.Send(req, azure.DoRetryWithRegistration(client.Client))
+	resp, err = client.Send(req, azure.DoRetryWithRegistration(client.Client))
 	if err != nil {
-		return CreateFuture{}, err
+		return
 	}
-	future, err := azure.NewFutureFromResponse(resp)
-	return CreateFuture{
-		FutureAPI: &future,
-		Result: func(client Client) (rt ResourceType, err error) {
-			var done bool
-			done, err = future.DoneWithContext(context.Background(), client)
-			if err != nil {
-				err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", future.Response(), "Polling failure")
-				return
-			}
-			if !done {
-				err = azure.NewAsyncOpIncompleteError("redis.CreateFuture")
-				return
-			}
-			sender := autorest.DecorateSender(client, autorest.DoRetryForStatusCodes(client.RetryAttempts, client.RetryDuration, autorest.StatusCodesForRetry...))
-			if rt.Response.Response, err = future.GetResult(sender); err == nil && rt.Response.Response.StatusCode != http.StatusNoContent {
-				rt, err = client.CreateResponder(rt.Response.Response)
-				if err != nil {
-					err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", rt.Response.Response, "Failure responding to request")
-				}
-			}
+	var azFuture azure.Future
+	azFuture, err = azure.NewFutureFromResponse(resp)
+	future.FutureAPI = &azFuture
+	future.Result = func(client Client) (rt ResourceType, err error) {
+		var done bool
+		done, err = future.DoneWithContext(context.Background(), client)
+		if err != nil {
+			err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", future.Response(), "Polling failure")
 			return
-		},
-	}, err
+		}
+		if !done {
+			err = azure.NewAsyncOpIncompleteError("redis.CreateFuture")
+			return
+		}
+		sender := autorest.DecorateSender(client, autorest.DoRetryForStatusCodes(client.RetryAttempts, client.RetryDuration, autorest.StatusCodesForRetry...))
+		if rt.Response.Response, err = future.GetResult(sender); err == nil && rt.Response.Response.StatusCode != http.StatusNoContent {
+			rt, err = client.CreateResponder(rt.Response.Response)
+			if err != nil {
+				err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", rt.Response.Response, "Failure responding to request")
+			}
+		}
+		return
+	}
+	return
 }
 
 // CreateResponder handles the response to the Create request. The method always

@@ -19,11 +19,12 @@ package redis
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/validation"
 	"github.com/Azure/go-autorest/tracing"
-	"net/http"
 )
 
 // Client is the REST API for Azure Redis Cache Service.
@@ -162,7 +163,7 @@ func (client Client) Create(ctx context.Context, resourceGroupName string, name 
 
 	result, err = client.CreateSender(req)
 	if err != nil {
-		err = autorest.NewErrorWithError(err, "redis.Client", "Create", result.Response(), "Failure sending request")
+		err = autorest.NewErrorWithError(err, "redis.Client", "Create", nil, "Failure sending request")
 		return
 	}
 
@@ -194,14 +195,16 @@ func (client Client) CreatePreparer(ctx context.Context, resourceGroupName strin
 
 // CreateSender sends the Create request. The method will close the
 // http.Response Body if it receives an error.
-func (client Client) CreateSender(req *http.Request) (future CreateFuture, err error) {
-	var resp *http.Response
-	resp, err = client.Send(req, azure.DoRetryWithRegistration(client.Client))
+func (client Client) CreateSender(req *http.Request) (CreateFuture, error) {
+	resp, err := client.Send(req, azure.DoRetryWithRegistration(client.Client))
 	if err != nil {
-		return
+		return nil, err
 	}
-	future.Future, err = azure.NewFutureFromResponse(resp)
-	return
+	future, err := azure.NewFutureFromResponse(resp)
+	if err != nil {
+		return nil, err
+	}
+	return &createFuture{Future: future}, nil
 }
 
 // CreateResponder handles the response to the Create request. The method always

@@ -20,12 +20,13 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/date"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/Azure/go-autorest/tracing"
-	"net/http"
 )
 
 // The package's fully qualified name.
@@ -94,13 +95,18 @@ func (cp CommonProperties) MarshalJSON() ([]byte, error) {
 }
 
 // CreateFuture an abstraction for monitoring and retrieving the results of a long-running operation.
-type CreateFuture struct {
+type CreateFuture interface {
+	azure.FutureAPI
+	Result(Client) (ResourceType, error)
+}
+
+type createFuture struct {
 	azure.Future
 }
 
 // Result returns the result of the asynchronous operation.
 // If the operation has not completed it will return an error.
-func (future *CreateFuture) Result(client Client) (rt ResourceType, err error) {
+func (future *createFuture) Result(client Client) (rt ResourceType, err error) {
 	var done bool
 	done, err = future.DoneWithContext(context.Background(), client)
 	if err != nil {

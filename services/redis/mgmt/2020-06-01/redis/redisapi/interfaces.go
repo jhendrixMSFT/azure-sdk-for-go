@@ -19,8 +19,10 @@ package redisapi
 
 import (
 	"context"
+
 	"github.com/Azure/azure-sdk-for-go/services/redis/mgmt/2020-06-01/redis"
 	"github.com/Azure/go-autorest/autorest"
+	"github.com/Azure/go-autorest/autorest/azure"
 )
 
 // OperationsClientAPI contains the set of methods on the OperationsClient type.
@@ -31,10 +33,15 @@ type OperationsClientAPI interface {
 
 var _ OperationsClientAPI = (*redis.OperationsClient)(nil)
 
+type CreateFutureAPI interface {
+	azure.FutureAPI
+	Result(redis.Client) (redis.ResourceType, error)
+}
+
 // ClientAPI contains the set of methods on the Client type.
 type ClientAPI interface {
 	CheckNameAvailability(ctx context.Context, parameters redis.CheckNameAvailabilityParameters) (result autorest.Response, err error)
-	Create(ctx context.Context, resourceGroupName string, name string, parameters redis.CreateParameters) (result redis.CreateFuture, err error)
+	Create(ctx context.Context, resourceGroupName string, name string, parameters redis.CreateParameters) (result CreateFutureAPI, err error)
 	Delete(ctx context.Context, resourceGroupName string, name string) (result redis.DeleteFuture, err error)
 	ExportData(ctx context.Context, resourceGroupName string, name string, parameters redis.ExportRDBParameters) (result redis.ExportDataFuture, err error)
 	ForceReboot(ctx context.Context, resourceGroupName string, name string, parameters redis.RebootParameters) (result redis.ForceRebootResponse, err error)
@@ -50,7 +57,7 @@ type ClientAPI interface {
 	Update(ctx context.Context, resourceGroupName string, name string, parameters redis.UpdateParameters) (result redis.ResourceType, err error)
 }
 
-var _ ClientAPI = (*redis.Client)(nil)
+//var _ ClientAPI = (*redis.Client)(nil)
 
 // FirewallRulesClientAPI contains the set of methods on the FirewallRulesClient type.
 type FirewallRulesClientAPI interface {

@@ -90,6 +90,9 @@ type RetryOption func(o *RetryOptions)
 // Specifying a value less than 1 indicates one try and no retries.
 func WithMaxRetries(maxRetries int32) RetryOption {
 	return func(o *RetryOptions) {
+		if maxRetries < 0 {
+			maxRetries = 0
+		}
 		o.MaxRetries = maxRetries
 	}
 }
@@ -129,17 +132,19 @@ func WithTryTimeout(tryTimeout time.Duration) RetryOption {
 // as described in the documentation for RetryOptions.
 // To override default options, specify one or more RetryOption funcs as required.
 func NewRetryPolicy(opts ...RetryOption) Policy {
-	o := RetryOptions{
-		StatusCodes:   StatusCodesForRetry,
-		MaxRetries:    defaultMaxRetries,
-		TryTimeout:    1 * time.Minute,
-		RetryDelay:    4 * time.Second,
-		MaxRetryDelay: 120 * time.Second,
+	p := &retryPolicy{
+		options: RetryOptions{
+			StatusCodes:   StatusCodesForRetry,
+			MaxRetries:    defaultMaxRetries,
+			TryTimeout:    1 * time.Minute,
+			RetryDelay:    4 * time.Second,
+			MaxRetryDelay: 120 * time.Second,
+		},
 	}
 	for _, opt := range opts {
-		opt(&o)
+		opt(&p.options)
 	}
-	return &retryPolicy{options: o}
+	return p
 }
 
 type retryPolicy struct {

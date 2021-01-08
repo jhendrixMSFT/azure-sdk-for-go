@@ -21,25 +21,25 @@ const (
 // RetryOptions configures the retry policy's behavior.
 type RetryOptions struct {
 	// MaxRetries specifies the maximum number of attempts a failed operation will be retried
-	// before producing an error.  A value of zero means one try and no retries.
+	// before returning an error.
+	// The default value is three.
 	MaxRetries int32
 
 	// TryTimeout indicates the maximum time allowed for any single try of an HTTP request.
+	// The default value is one minute.
 	TryTimeout time.Duration
 
-	// RetryDelay specifies the amount of delay to use before retrying an operation.
-	// The delay increases exponentially with each retry up to a maximum specified by MaxRetryDelay.
-	// If you specify 0, then you must also specify 0 for MaxRetryDelay.
-	// If you specify RetryDelay, then you must also specify MaxRetryDelay, and MaxRetryDelay should be
-	// equal to or greater than RetryDelay.
+	// RetryDelay specifies the initial amount of delay to use before retrying an operation.
+	// The delay increases exponentially with each retry up to the maximum specified by MaxRetryDelay.
+	// The default value is four seconds.
 	RetryDelay time.Duration
 
 	// MaxRetryDelay specifies the maximum delay allowed before retrying an operation.
-	// If you specify 0, then you must also specify 0 for RetryDelay.
+	// The default Value is 120 seconds.
 	MaxRetryDelay time.Duration
 
 	// StatusCodes specifies the HTTP status codes that indicate the operation should be retried.
-	// If unspecified it will default to the status codes in StatusCodesForRetry.
+	// The default value is the status codes in StatusCodesForRetry.
 	StatusCodes []int
 }
 
@@ -54,17 +54,6 @@ var (
 		http.StatusGatewayTimeout,      // 504
 	}
 )
-
-// DefaultRetryOptions returns an instance of RetryOptions initialized with default values.
-func DefaultRetryOptions() RetryOptions {
-	return RetryOptions{
-		StatusCodes:   StatusCodesForRetry,
-		MaxRetries:    defaultMaxRetries,
-		TryTimeout:    1 * time.Minute,
-		RetryDelay:    4 * time.Second,
-		MaxRetryDelay: 120 * time.Second,
-	}
-}
 
 // used as a context key for adding/retrieving RetryOptions
 type ctxWithRetryOptionsKey struct{}
@@ -94,15 +83,63 @@ func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 
 	return delay
 }
 
-// NewRetryPolicy creates a policy object configured using the specified options.
-// Pass nil to accept the default values; this is the same as passing the result
-// from a call to DefaultRetryOptions().
-func NewRetryPolicy(o *RetryOptions) Policy {
-	if o == nil {
-		def := DefaultRetryOptions()
-		o = &def
+// RetryOption is an optional argument to NewRetryPolicy().
+type RetryOption func(o *RetryOptions)
+
+// WithMaxRetries sets the maximum number of retries.
+// Specifying a value less than 1 indicates one try and no retries.
+func WithMaxRetries(maxRetries int32) RetryOption {
+	return func(o *RetryOptions) {
+		o.MaxRetries = maxRetries
 	}
-	return &retryPolicy{options: *o}
+}
+
+// WithMaxRetryDelay sets the maximum delay between retries.
+// Ideally the value is greater than, or equal to, the value specified in WithRetryDelay().
+func WithMaxRetryDelay(maxDelay time.Duration) RetryOption {
+	return func(o *RetryOptions) {
+		o.MaxRetryDelay = maxDelay
+	}
+}
+
+// WithRetryDelay sets the initial delay between retries.
+// The value grows exponentially per retry.
+func WithRetryDelay(retryDelay time.Duration) RetryOption {
+	return func(o *RetryOptions) {
+		o.RetryDelay = retryDelay
+	}
+}
+
+// WithStatusCodes sets the HTTP status codes that will trigger a retry.
+func WithStatusCodes(statusCodes []int) RetryOption {
+	return func(o *RetryOptions) {
+		o.StatusCodes = statusCodes
+	}
+}
+
+// WithTryTimeout sets the per-try timeout.
+// Setting this to a small value might cause premature HTTP request time-outs.
+func WithTryTimeout(tryTimeout time.Duration) RetryOption {
+	return func(o *RetryOptions) {
+		o.TryTimeout = tryTimeout
+	}
+}
+
+// NewRetryPolicy creates a policy object configured using the default options
+// as described in the documentation for RetryOptions.
+// To override default options, specify one or more RetryOption funcs as required.
+func NewRetryPolicy(opts ...RetryOption) Policy {
+	o := RetryOptions{
+		StatusCodes:   StatusCodesForRetry,
+		MaxRetries:    defaultMaxRetries,
+		TryTimeout:    1 * time.Minute,
+		RetryDelay:    4 * time.Second,
+		MaxRetryDelay: 120 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return &retryPolicy{options: o}
 }
 
 type retryPolicy struct {

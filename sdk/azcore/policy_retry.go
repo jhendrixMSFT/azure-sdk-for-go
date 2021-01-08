@@ -55,13 +55,28 @@ var (
 	}
 )
 
+// defaultRetryOptions returns an instance of RetryOptions initialized with default values.
+func defaultRetryOptions() RetryOptions {
+	return RetryOptions{
+		StatusCodes:   StatusCodesForRetry,
+		MaxRetries:    defaultMaxRetries,
+		TryTimeout:    1 * time.Minute,
+		RetryDelay:    4 * time.Second,
+		MaxRetryDelay: 120 * time.Second,
+	}
+}
+
 // used as a context key for adding/retrieving RetryOptions
 type ctxWithRetryOptionsKey struct{}
 
 // WithRetryOptions adds the specified RetryOptions to the parent context.
 // Use this to specify custom RetryOptions at the API-call level.
-func WithRetryOptions(parent context.Context, options RetryOptions) context.Context {
-	return context.WithValue(parent, ctxWithRetryOptionsKey{}, options)
+func WithRetryOptions(parent context.Context, opts ...RetryOption) context.Context {
+	o := defaultRetryOptions()
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return context.WithValue(parent, ctxWithRetryOptionsKey{}, o)
 }
 
 func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 0
@@ -133,13 +148,7 @@ func WithTryTimeout(tryTimeout time.Duration) RetryOption {
 // To override default options, specify one or more RetryOption funcs as required.
 func NewRetryPolicy(opts ...RetryOption) Policy {
 	p := &retryPolicy{
-		options: RetryOptions{
-			StatusCodes:   StatusCodesForRetry,
-			MaxRetries:    defaultMaxRetries,
-			TryTimeout:    1 * time.Minute,
-			RetryDelay:    4 * time.Second,
-			MaxRetryDelay: 120 * time.Second,
-		},
+		options: defaultRetryOptions(),
 	}
 	for _, opt := range opts {
 		opt(&p.options)

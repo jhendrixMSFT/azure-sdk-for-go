@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"time"
@@ -113,22 +114,32 @@ func WithMaxRetries(maxRetries int32) RetryOption {
 }
 
 // WithMaxRetryDelay sets the maximum delay between retries.
-// Ideally the value is greater than, or equal to, the value specified in WithRetryDelay().
+// Typically the value is greater than, or equal to, the value specified in WithRetryDelay().
+// Specifying a value less than 1 indicates no cap.
 func WithMaxRetryDelay(maxDelay time.Duration) RetryOption {
 	return func(o *RetryOptions) {
+		if maxDelay < 1 {
+			// not really an unlimited cap, but sufficiently large enough to be considered as such
+			maxDelay = math.MaxInt64
+		}
 		o.MaxRetryDelay = maxDelay
 	}
 }
 
 // WithRetryDelay sets the initial delay between retries.
 // The value grows exponentially per retry.
+// Specifying a value less than 1 indicates no delay.
 func WithRetryDelay(retryDelay time.Duration) RetryOption {
 	return func(o *RetryOptions) {
+		if retryDelay < 0 {
+			retryDelay = 0
+		}
 		o.RetryDelay = retryDelay
 	}
 }
 
 // WithStatusCodes sets the HTTP status codes that will trigger a retry.
+// Specifying a nil or empty slice will cause retries to happen only for transport errors.
 func WithStatusCodes(statusCodes []int) RetryOption {
 	return func(o *RetryOptions) {
 		o.StatusCodes = statusCodes

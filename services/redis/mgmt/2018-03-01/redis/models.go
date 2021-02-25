@@ -20,12 +20,13 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/date"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/Azure/go-autorest/tracing"
-	"net/http"
 )
 
 // The package's fully qualified name.
@@ -89,6 +90,43 @@ type CreateFuture struct {
 	// Result returns the result of the asynchronous operation.
 	// If the operation has not completed it will return an error.
 	Result func(Client) (ResourceType, error)
+}
+
+// UnmarshalJSON is the custom unmarshaller for CreateFuture.
+func (cf *CreateFuture) UnmarshalJSON(body []byte) error {
+	var azFuture azure.Future
+	if err := json.Unmarshal(body, &azFuture); err != nil {
+		return err
+	}
+	cf.FutureAPI = &azFuture
+	cf.Result = cf.result
+	return nil
+}
+
+// result is the default implementation for CreateFuture.Result.
+func (cf *CreateFuture) result(client Client) (rt ResourceType, err error) {
+	var done bool
+	done, err = cf.DoneWithContext(context.Background(), client)
+	if err != nil {
+		err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", cf.Response(), "Polling failure")
+		return
+	}
+	if !done {
+		err = azure.NewAsyncOpIncompleteError("redis.CreateFuture")
+		return
+	}
+	sender := autorest.DecorateSender(client, autorest.DoRetryForStatusCodes(client.RetryAttempts, client.RetryDuration, autorest.StatusCodesForRetry...))
+	rt.Response.Response, err = cf.GetResult(sender)
+	if rt.Response.Response == nil && err == nil {
+		err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", nil, "received nil response and error")
+	}
+	if err == nil && rt.Response.Response.StatusCode != http.StatusNoContent {
+		rt, err = client.CreateResponder(rt.Response.Response)
+		if err != nil {
+			err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", rt.Response.Response, "Failure responding to request")
+		}
+	}
+	return
 }
 
 // CreateParameters parameters supplied to the Create Redis operation.

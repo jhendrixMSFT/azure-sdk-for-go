@@ -19,11 +19,12 @@ package redis
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/validation"
 	"github.com/Azure/go-autorest/tracing"
-	"net/http"
 )
 
 // Client is the REST API for Azure Redis Cache Service.
@@ -203,30 +204,7 @@ func (client Client) CreateSender(req *http.Request) (future CreateFuture, err e
 	var azf azure.Future
 	azf, err = azure.NewFutureFromResponse(resp)
 	future.FutureAPI = &azf
-	future.Result = func(client Client) (rt ResourceType, err error) {
-		var done bool
-		done, err = future.DoneWithContext(context.Background(), client)
-		if err != nil {
-			err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", future.Response(), "Polling failure")
-			return
-		}
-		if !done {
-			err = azure.NewAsyncOpIncompleteError("redis.CreateFuture")
-			return
-		}
-		sender := autorest.DecorateSender(client, autorest.DoRetryForStatusCodes(client.RetryAttempts, client.RetryDuration, autorest.StatusCodesForRetry...))
-		rt.Response.Response, err = future.GetResult(sender)
-		if rt.Response.Response == nil && err == nil {
-			err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", nil, "received nil response and error")
-		}
-		if err == nil && rt.Response.Response.StatusCode != http.StatusNoContent {
-			rt, err = client.CreateResponder(rt.Response.Response)
-			if err != nil {
-				err = autorest.NewErrorWithError(err, "redis.CreateFuture", "Result", rt.Response.Response, "Failure responding to request")
-			}
-		}
-		return
-	}
+	future.Result = future.result
 	return
 }
 

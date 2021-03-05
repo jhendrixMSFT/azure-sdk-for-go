@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 // UsernamePasswordCredentialOptions can be used to provide additional information to configure the UsernamePasswordCredential.
@@ -31,9 +32,7 @@ type UsernamePasswordCredentialOptions struct {
 // credential will fail to get a token returning an AuthenticationFailureError. Also, this credential requires a high degree of trust and is not
 // recommended outside of prototyping when more secure credentials can be used.
 type UsernamePasswordCredential struct {
-	client   *aadIdentityClient
-	tenantID string // Gets the Azure Active Directory tenant (directory) ID of the service principal
-	clientID string // Gets the client (application) ID of the service principal
+	client   public.Client
 	username string // Gets the user account's user name
 	password string // Gets the user account's password
 }
@@ -56,11 +55,14 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 	if err != nil {
 		return nil, err
 	}
-	c, err := newAADIdentityClient(authorityHost, pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	c, err := public.New(clientID,
+		public.WithAuthority(azcore.JoinPaths(authorityHost, tenantID)),
+		public.WithHTTPClient(pipelineAdapter{pl: pipeline}))
 	if err != nil {
 		return nil, err
 	}
-	return &UsernamePasswordCredential{tenantID: tenantID, clientID: clientID, username: username, password: password, client: c}, nil
+	return &UsernamePasswordCredential{username: username, password: password, client: c}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory using the specified username and password.
@@ -68,13 +70,16 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 // ctx: The context used to control the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *UsernamePasswordCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.authenticateUsernamePassword(ctx, c.tenantID, c.clientID, c.username, c.password, opts.Scopes)
+	tk, err := c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
 	if err != nil {
 		addGetTokenFailureLogs("Username Password Credential", err, true)
 		return nil, err
 	}
 	logGetTokenSuccess(c, opts)
-	return tk, err
+	return &azcore.AccessToken{
+		Token:     tk.AccessToken,
+		ExpiresOn: tk.ExpiresOn,
+	}, err
 }
 
 // AuthenticationPolicy implements the azcore.Credential interface on UsernamePasswordCredential.

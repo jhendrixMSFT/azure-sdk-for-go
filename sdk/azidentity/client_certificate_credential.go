@@ -10,11 +10,13 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"golang.org/x/crypto/pkcs12"
 )
 
@@ -44,11 +46,7 @@ type ClientCertificateCredentialOptions struct {
 // on how to configure certificate authentication can be found here:
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-certificate-credentials#register-your-certificate-with-azure-ad
 type ClientCertificateCredential struct {
-	client               *aadIdentityClient
-	tenantID             string        // The Azure Active Directory tenant (directory) ID of the service principal
-	clientID             string        // The client (application) ID of the service principal
-	cert                 *certContents // The contents of the certificate file
-	sendCertificateChain bool          // Determines whether to include the certificate chain in the claims to retreive a token
+	client confidential.Client
 }
 
 // NewClientCertificateCredential creates an instance of ClientCertificateCredential with the details needed to authenticate against Azure Active Directory with the specified certificate.
@@ -93,16 +91,20 @@ func NewClientCertificateCredential(tenantID string, clientID string, certificat
 	if err != nil {
 		return nil, err
 	}
-	c, err := newAADIdentityClient(authorityHost, pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	//pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	// BUGBUG: can't specify SendCertificateChain
+	c, err := confidential.New(clientID, confidential.NewCredFromCert(cert.ce, cert.pk),
+		confidential.WithAuthority(azcore.JoinPaths(authorityHost, tenantID)),
+		/*confidential.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
 	if err != nil {
 		return nil, err
 	}
-	return &ClientCertificateCredential{tenantID: tenantID, clientID: clientID, cert: cert, sendCertificateChain: options.SendCertificateChain, client: c}, nil
+	return &ClientCertificateCredential{client: c}, nil
 }
 
 // contains decoded cert contents we care about
 type certContents struct {
-	fp                 fingerprint
+	ce                 *x509.Certificate
 	pk                 *rsa.PrivateKey
 	publicCertificates []string
 }
@@ -124,7 +126,7 @@ func newCertContents(blocks []*pem.Block, fromPEM bool, sendCertificateChain boo
 			}
 			rsaKey, ok := key.(*rsa.PrivateKey)
 			if !ok {
-				return nil, errors.New("unexpected private key type")
+				return nil, fmt.Errorf("unexpected private key type %T", key)
 			}
 			cc.pk = rsaKey
 			break
@@ -150,15 +152,11 @@ func newCertContents(blocks []*pem.Block, fromPEM bool, sendCertificateChain boo
 				continue
 			}
 			// found a match
-			fp, err := newFingerprint(block)
-			if err != nil {
-				return nil, err
-			}
-			cc.fp = fp
+			cc.ce = cert
 			break
 		}
 	}
-	if cc.fp == nil {
+	if cc.ce == nil {
 		return nil, errors.New("missing certificate")
 	}
 	// now find all the public certificates to send in the x5c header
@@ -207,13 +205,25 @@ func extractFromPFXFile(certData []byte, password string, sendCertificateChain b
 // ctx: controlling the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *ClientCertificateCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.authenticateCertificate(ctx, c.tenantID, c.clientID, c.cert, c.sendCertificateChain, opts.Scopes)
+	// check for cached token
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
+	// request token
+	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Certificate Credential", err, true)
 		return nil, err
 	}
 	logGetTokenSuccess(c, opts)
-	return tk, nil
+	return &azcore.AccessToken{
+		Token:     tk.AccessToken,
+		ExpiresOn: tk.ExpiresOn,
+	}, err
 }
 
 // AuthenticationPolicy implements the azcore.Credential interface on ClientCertificateCredential.

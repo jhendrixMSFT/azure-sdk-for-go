@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 )
 
 // ClientSecretCredentialOptions configures the ClientSecretCredential with optional parameters.
@@ -30,10 +31,7 @@ type ClientSecretCredentialOptions struct {
 // to configure a client secret can be found here:
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-access-web-apis#add-credentials-to-your-web-application
 type ClientSecretCredential struct {
-	client       *aadIdentityClient
-	tenantID     string // Gets the Azure Active Directory tenant (directory) ID of the service principal
-	clientID     string // Gets the client (application) ID of the service principal
-	clientSecret string // Gets the client secret that was generated for the App Registration used to authenticate the client.
+	client confidential.Client
 }
 
 // NewClientSecretCredential constructs a new ClientSecretCredential with the details needed to authenticate against Azure Active Directory with a client secret.
@@ -52,11 +50,18 @@ func NewClientSecretCredential(tenantID string, clientID string, clientSecret st
 	if err != nil {
 		return nil, err
 	}
-	c, err := newAADIdentityClient(authorityHost, pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	//pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	cred, err := confidential.NewCredFromSecret(clientSecret)
 	if err != nil {
 		return nil, err
 	}
-	return &ClientSecretCredential{tenantID: tenantID, clientID: clientID, clientSecret: clientSecret, client: c}, nil
+	c, err := confidential.New(clientID, cred,
+		confidential.WithAuthority(azcore.JoinPaths(authorityHost, tenantID)),
+		/*confidential.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientSecretCredential{client: c}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory, using the specified client secret to authenticate.
@@ -64,13 +69,25 @@ func NewClientSecretCredential(tenantID string, clientID string, clientSecret st
 // opts: TokenRequestOptions contains the list of scopes for which the token will have access.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *ClientSecretCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.authenticate(ctx, c.tenantID, c.clientID, c.clientSecret, opts.Scopes)
+	// check for cached token
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
+	// request token
+	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Secret Credential", err, true)
 		return nil, err
 	}
 	logGetTokenSuccess(c, opts)
-	return tk, nil
+	return &azcore.AccessToken{
+		Token:     tk.AccessToken,
+		ExpiresOn: tk.ExpiresOn,
+	}, err
 }
 
 // AuthenticationPolicy implements the azcore.Credential interface on ClientSecretCredential and calls the Bearer Token policy

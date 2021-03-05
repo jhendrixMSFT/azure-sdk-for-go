@@ -223,3 +223,19 @@ func oauthPath(tenantID string) string {
 	}
 	return "/oauth2/v2.0"
 }
+
+type pipelineAdapter struct {
+	pl azcore.Pipeline
+}
+
+func (p pipelineAdapter) CloseIdleConnections() {
+	// do nothing
+}
+
+func (p pipelineAdapter) Do(r *http.Request) (*http.Response, error) {
+	resp, err := p.pl.Do(&azcore.Request{Request: r})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Response, err
+}

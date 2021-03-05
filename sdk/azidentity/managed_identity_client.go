@@ -197,7 +197,7 @@ func (c *managedIdentityClient) createAppServiceAuthRequest(ctx context.Context,
 		q.Add("api-version", "2019-08-01")
 		q.Add("resource", scopes[0])
 		if clientID != "" {
-			q.Add(qpClientID, clientID)
+			q.Add("client_id", clientID)
 		}
 	}
 

@@ -256,7 +256,7 @@ func TestManagedIdentityCredential_CreateAppServiceAuthRequestV20190801(t *testi
 	if reqQueryParams["resource"][0] != msiScope {
 		t.Fatalf("Unexpected resource in resource query param")
 	}
-	if reqQueryParams[qpClientID][0] != clientID {
+	if reqQueryParams["client_id"][0] != clientID {
 		t.Fatalf("Unexpected client ID in resource query param")
 	}
 }

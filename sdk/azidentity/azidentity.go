@@ -239,3 +239,10 @@ func (p pipelineAdapter) Do(r *http.Request) (*http.Response, error) {
 	}
 	return resp.Response, err
 }
+
+func (p pipelineAdapter) rewindableBody(r *http.Request) {
+	if _, ok := r.Body.(azcore.ReadSeekCloser); ok {
+		// already rewindable
+		return
+	}
+}

@@ -1,4 +1,4 @@
-module github.com/Azure/azure-sdk-for-go/sdk/arm/compute/2020-09-30/armcompute
+module github.com/Azure/azure-sdk-for-go/sdk/arm/compute
 
 go 1.13
 

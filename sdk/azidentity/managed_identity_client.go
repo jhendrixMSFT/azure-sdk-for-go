@@ -31,6 +31,7 @@ const (
 	msiSecret          = "MSI_SECRET"
 	imdsAPIVersion     = "2018-02-01"
 	azureArcAPIVersion = "2019-08-15"
+	qpClientID         = "client_id"
 )
 
 type msiType int

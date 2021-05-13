@@ -4,7 +4,9 @@
 package azidentity
 
 import (
+	"bytes"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -233,16 +235,27 @@ func (p pipelineAdapter) CloseIdleConnections() {
 }
 
 func (p pipelineAdapter) Do(r *http.Request) (*http.Response, error) {
-	resp, err := p.pl.Do(&azcore.Request{Request: r})
+	req, err := azcore.NewRequest(r.Context(), r.Method, r.URL.String())
+	if err != nil {
+		return nil, err
+	}
+	if r.Body != nil && r.Body != http.NoBody {
+		// create a rewindable body from the existing body as required
+		var body azcore.ReadSeekCloser
+		if rsc, ok := r.Body.(azcore.ReadSeekCloser); ok {
+			body = rsc
+		} else {
+			b, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				return nil, err
+			}
+			body = azcore.NopCloser(bytes.NewReader(b))
+		}
+		req.SetBody(body, r.Header.Get("Content-Type"))
+	}
+	resp, err := p.pl.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Response, err
-}
-
-func (p pipelineAdapter) rewindableBody(r *http.Request) {
-	if _, ok := r.Body.(azcore.ReadSeekCloser); ok {
-		// already rewindable
-		return
-	}
 }

@@ -74,10 +74,10 @@ func NewInteractiveBrowserCredential(options *InteractiveBrowserCredentialOption
 	if err != nil {
 		return nil, err
 	}
-	//pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
 	c, err := public.New(cp.ClientID,
 		public.WithAuthority(azcore.JoinPaths(authorityHost, cp.TenantID)),
-		/*public.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
+		public.WithHTTPClient(pipelineAdapter{pl: pipeline}))
 	if err != nil {
 		return nil, err
 	}

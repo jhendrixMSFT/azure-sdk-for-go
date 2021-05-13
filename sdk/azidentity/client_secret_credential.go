@@ -50,14 +50,14 @@ func NewClientSecretCredential(tenantID string, clientID string, clientSecret st
 	if err != nil {
 		return nil, err
 	}
-	//pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
 	cred, err := confidential.NewCredFromSecret(clientSecret)
 	if err != nil {
 		return nil, err
 	}
 	c, err := confidential.New(clientID, cred,
 		confidential.WithAuthority(azcore.JoinPaths(authorityHost, tenantID)),
-		/*confidential.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
+		confidential.WithHTTPClient(pipelineAdapter{pl: pipeline}))
 	if err != nil {
 		return nil, err
 	}

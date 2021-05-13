@@ -92,10 +92,13 @@ func NewClientCertificateCredential(tenantID string, clientID string, certificat
 		return nil, err
 	}
 	//pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
-	// BUGBUG: can't specify SendCertificateChain
+	confOpts := []confidential.Option{confidential.WithAuthority(azcore.JoinPaths(authorityHost, tenantID))}
+	if options.SendCertificateChain {
+		confOpts = append(confOpts, confidential.WithX5C())
+	}
 	c, err := confidential.New(clientID, confidential.NewCredFromCert(cert.ce, cert.pk),
-		confidential.WithAuthority(azcore.JoinPaths(authorityHost, tenantID)),
-		/*confidential.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
+		confOpts...,
+	/*confidential.WithHTTPClient(pipelineAdapter{pl: pipeline})*/)
 	if err != nil {
 		return nil, err
 	}

@@ -6,9 +6,7 @@ package azidentity
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -31,47 +29,6 @@ func TestAuthorizationCodeCredential_InvalidTenantID(t *testing.T) {
 	var errType *CredentialUnavailableError
 	if !errors.As(err, &errType) {
 		t.Fatalf("Did not receive a CredentialUnavailableError. Received: %t", err)
-	}
-}
-
-func TestAuthorizationCodeCredential_CreateAuthRequestSuccess(t *testing.T) {
-	cred, err := NewAuthorizationCodeCredential(tenantID, clientID, testAuthCode, testRedirectURI, nil)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	req, err := cred.client.createAuthorizationCodeAuthRequest(context.Background(), cred.tenantID, cred.clientID, cred.authCode, cred.clientSecret, "", cred.redirectURI, []string{scope})
-	if err != nil {
-		t.Fatalf("Unexpectedly received an error: %v", err)
-	}
-	if req.Request.Header.Get(azcore.HeaderContentType) != azcore.HeaderURLEncoded {
-		t.Fatal("Unexpected value for Content-Type header")
-	}
-	body, err := ioutil.ReadAll(req.Request.Body)
-	if err != nil {
-		t.Fatal("Unable to read request body")
-	}
-	bodyStr := string(body)
-	reqQueryParams, err := url.ParseQuery(bodyStr)
-	if err != nil {
-		t.Fatal("Unable to parse query params in request")
-	}
-	if reqQueryParams[qpClientID][0] != clientID {
-		t.Fatal("Unexpected client ID in the client_id header")
-	}
-	if reqQueryParams[qpScope][0] != scope {
-		t.Fatal("Unexpected scope in scope header")
-	}
-	if reqQueryParams[qpCode][0] != testAuthCode {
-		t.Fatal("Unexpected authorization code")
-	}
-	if reqQueryParams[qpRedirectURI][0] != testRedirectURI {
-		t.Fatal("Unexpected redirectURI")
-	}
-	if req.Request.URL.Host != defaultTestAuthorityHost {
-		t.Fatal("Unexpected default authority host")
-	}
-	if req.Request.URL.Scheme != "https" {
-		t.Fatal("Wrong request scheme")
 	}
 }
 

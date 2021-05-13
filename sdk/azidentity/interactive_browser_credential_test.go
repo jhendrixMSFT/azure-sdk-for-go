@@ -4,14 +4,8 @@
 package azidentity
 
 import (
-	"context"
 	"errors"
-	"net/http"
 	"testing"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
-	"golang.org/x/net/http2"
 )
 
 func TestInteractiveBrowserCredential_InvalidTenantID(t *testing.T) {
@@ -30,23 +24,7 @@ func TestInteractiveBrowserCredential_InvalidTenantID(t *testing.T) {
 	}
 }
 
-func TestInteractiveBrowserCredential_CreateWithNilOptions(t *testing.T) {
-	cred, err := NewInteractiveBrowserCredential(nil)
-	if err != nil {
-		t.Fatalf("Failed to create interactive browser credential: %v", err)
-	}
-	if cred.client.authorityHost != AzurePublicCloud {
-		t.Fatalf("Wrong authority host set. Expected: %s, Received: %s", AzurePublicCloud, cred.client.authorityHost)
-	}
-	if cred.options.ClientID != developerSignOnClientID {
-		t.Fatalf("Wrong clientID set. Expected: %s, Received: %s", developerSignOnClientID, cred.options.ClientID)
-	}
-	if cred.options.TenantID != organizationsTenantID {
-		t.Fatalf("Wrong tenantID set. Expected: %s, Received: %s", organizationsTenantID, cred.options.TenantID)
-	}
-}
-
-func TestInteractiveBrowserCredential_GetTokenSuccess(t *testing.T) {
+/*func TestInteractiveBrowserCredential_GetTokenSuccess(t *testing.T) {
 	srv, close := mock.NewTLSServer(mock.WithHTTP2Enabled(true))
 	defer close()
 	tr := &http.Transport{}
@@ -171,4 +149,4 @@ func TestInteractiveBrowserCredential_GetTokenInvalidCredentials(t *testing.T) {
 	if respError.Response == nil {
 		t.Fatalf("Did not receive an error response")
 	}
-}
+}*/

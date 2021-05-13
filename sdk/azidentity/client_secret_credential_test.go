@@ -6,9 +6,7 @@ package azidentity
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -37,44 +35,6 @@ func TestClientSecretCredential_InvalidTenantID(t *testing.T) {
 	var errType *CredentialUnavailableError
 	if !errors.As(err, &errType) {
 		t.Fatalf("Did not receive a CredentialUnavailableError. Received: %t", err)
-	}
-}
-
-func TestClientSecretCredential_CreateAuthRequestSuccess(t *testing.T) {
-	cred, err := NewClientSecretCredential(tenantID, clientID, secret, nil)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	req, err := cred.client.createClientSecretAuthRequest(context.Background(), cred.tenantID, cred.clientID, cred.clientSecret, []string{scope})
-	if err != nil {
-		t.Fatalf("Unexpectedly received an error: %v", err)
-	}
-	if req.Request.Header.Get(azcore.HeaderContentType) != azcore.HeaderURLEncoded {
-		t.Fatalf("Unexpected value for Content-Type header")
-	}
-	body, err := ioutil.ReadAll(req.Request.Body)
-	if err != nil {
-		t.Fatalf("Unable to read request body")
-	}
-	bodyStr := string(body)
-	reqQueryParams, err := url.ParseQuery(bodyStr)
-	if err != nil {
-		t.Fatalf("Unable to parse query params in request")
-	}
-	if reqQueryParams[qpClientID][0] != clientID {
-		t.Fatalf("Unexpected client ID in the client_id header")
-	}
-	if reqQueryParams[qpClientSecret][0] != secret {
-		t.Fatalf("Unexpected secret in the client_secret header")
-	}
-	if reqQueryParams[qpScope][0] != scope {
-		t.Fatalf("Unexpected scope in scope header")
-	}
-	if req.Request.URL.Host != defaultTestAuthorityHost {
-		t.Fatalf("Unexpected default authority host")
-	}
-	if req.Request.URL.Scheme != "https" {
-		t.Fatalf("Wrong request scheme")
 	}
 }
 

@@ -27,7 +27,7 @@ type DeviceCodeCredentialOptions struct {
 	ClientID string
 	// The callback function used to send the login message back to the user
 	// The default will print device code log in information to stdout.
-	UserPrompt func(public.DeviceCodeResult)
+	UserPrompt func(DeviceCodeMessage)
 	// The host of the Azure Active Directory authority. The default is AzurePublicCloud.
 	// Leave empty to allow overriding the value from the AZURE_AUTHORITY_HOST environment variable.
 	AuthorityHost string
@@ -55,17 +55,21 @@ func (o *DeviceCodeCredentialOptions) init() {
 		o.ClientID = developerSignOnClientID
 	}
 	if o.UserPrompt == nil {
-		o.UserPrompt = func(dc public.DeviceCodeResult) {
+		o.UserPrompt = func(dc DeviceCodeMessage) {
 			fmt.Println(dc.Message)
 		}
 	}
 }
 
+// DeviceCodeMessage is used to store device code related information to help the user login and allow the device code flow to continue
+// to request a token to authenticate a user.
+type DeviceCodeMessage = public.DeviceCodeResult
+
 // DeviceCodeCredential authenticates a user using the device code flow, and provides access tokens for that user account.
 // For more information on the device code authentication flow see: https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-device-code.
 type DeviceCodeCredential struct {
 	client     public.Client
-	userPrompt func(public.DeviceCodeResult) // Sends the user a message with a verification URL and device code to sign in to the login server
+	userPrompt func(DeviceCodeMessage) // Sends the user a message with a verification URL and device code to sign in to the login server
 }
 
 // NewDeviceCodeCredential constructs a new DeviceCodeCredential used to authenticate against Azure Active Directory with a device code.

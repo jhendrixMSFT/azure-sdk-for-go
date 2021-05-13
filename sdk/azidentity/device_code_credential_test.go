@@ -6,9 +6,7 @@ package azidentity
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -36,134 +34,6 @@ func TestDeviceCodeCredential_InvalidTenantID(t *testing.T) {
 	var errType *CredentialUnavailableError
 	if !errors.As(err, &errType) {
 		t.Fatalf("Did not receive a CredentialUnavailableError. Received: %t", err)
-	}
-}
-
-func TestDeviceCodeCredential_CreateAuthRequestSuccess(t *testing.T) {
-	cred, err := NewDeviceCodeCredential(nil)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	req, err := cred.client.createDeviceCodeAuthRequest(context.Background(), cred.tenantID, cred.clientID, deviceCode, []string{deviceCodeScopes})
-	if err != nil {
-		t.Fatalf("Unexpectedly received an error: %v", err)
-	}
-	if req.Request.Header.Get(azcore.HeaderContentType) != azcore.HeaderURLEncoded {
-		t.Fatalf("Unexpected value for Content-Type header")
-	}
-	body, err := ioutil.ReadAll(req.Request.Body)
-	if err != nil {
-		t.Fatalf("Unable to read request body")
-	}
-	bodyStr := string(body)
-	reqQueryParams, err := url.ParseQuery(bodyStr)
-	if err != nil {
-		t.Fatalf("Unable to parse query params in request")
-	}
-	if reqQueryParams[qpGrantType][0] != deviceCodeGrantType {
-		t.Fatalf("Unexpected grant type")
-	}
-	if reqQueryParams[qpClientID][0] != developerSignOnClientID {
-		t.Fatalf("Unexpected client ID in the client_id header")
-	}
-	if reqQueryParams[qpDeviceCode][0] != deviceCode {
-		t.Fatalf("Unexpected username in the username header")
-	}
-	if reqQueryParams[qpScope][0] != deviceCodeScopes {
-		t.Fatalf("Unexpected scope in scope header")
-	}
-	if req.Request.URL.Host != defaultTestAuthorityHost {
-		t.Fatalf("Unexpected default authority host")
-	}
-	if req.Request.URL.Scheme != "https" {
-		t.Fatalf("Wrong request scheme")
-	}
-}
-
-func TestDeviceCodeCredential_CreateAuthRequestCustomClientID(t *testing.T) {
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	cred, err := NewDeviceCodeCredential(&options)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	req, err := cred.client.createDeviceCodeAuthRequest(context.Background(), cred.tenantID, cred.clientID, deviceCode, []string{deviceCodeScopes})
-	if err != nil {
-		t.Fatalf("Unexpectedly received an error: %v", err)
-	}
-	if req.Request.Header.Get(azcore.HeaderContentType) != azcore.HeaderURLEncoded {
-		t.Fatalf("Unexpected value for Content-Type header")
-	}
-	body, err := ioutil.ReadAll(req.Request.Body)
-	if err != nil {
-		t.Fatalf("Unable to read request body")
-	}
-	bodyStr := string(body)
-	reqQueryParams, err := url.ParseQuery(bodyStr)
-	if err != nil {
-		t.Fatalf("Unable to parse query params in request")
-	}
-	if reqQueryParams[qpGrantType][0] != deviceCodeGrantType {
-		t.Fatalf("Unexpected grant type")
-	}
-	if reqQueryParams[qpClientID][0] != clientID {
-		t.Fatalf("Unexpected client ID in the client_id header")
-	}
-	if reqQueryParams[qpDeviceCode][0] != deviceCode {
-		t.Fatalf("Unexpected username in the username header")
-	}
-	if reqQueryParams[qpScope][0] != deviceCodeScopes {
-		t.Fatalf("Unexpected scope in scope header")
-	}
-	if req.Request.URL.Host != defaultTestAuthorityHost {
-		t.Fatalf("Unexpected default authority host")
-	}
-	if req.Request.URL.Scheme != "https" {
-		t.Fatalf("Wrong request scheme")
-	}
-	if req.Request.URL.Path != "/organizations/oauth2/v2.0/token" {
-		t.Fatalf("Did not set the right path when passing in an empty tenant ID")
-	}
-}
-
-func TestDeviceCodeCredential_RequestNewDeviceCodeCustomTenantIDClientID(t *testing.T) {
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	cred, err := NewDeviceCodeCredential(&options)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	req, err := cred.client.createDeviceCodeNumberRequest(context.Background(), cred.tenantID, cred.clientID, []string{deviceCodeScopes})
-	if err != nil {
-		t.Fatalf("Unexpectedly received an error: %v", err)
-	}
-	if req.Request.Header.Get(azcore.HeaderContentType) != azcore.HeaderURLEncoded {
-		t.Fatalf("Unexpected value for Content-Type header")
-	}
-	body, err := ioutil.ReadAll(req.Request.Body)
-	if err != nil {
-		t.Fatalf("Unable to read request body")
-	}
-	bodyStr := string(body)
-	reqQueryParams, err := url.ParseQuery(bodyStr)
-	if err != nil {
-		t.Fatalf("Unable to parse query params in request")
-	}
-	if reqQueryParams[qpClientID][0] != clientID {
-		t.Fatalf("Unexpected client ID in the client_id header")
-	}
-	if reqQueryParams[qpScope][0] != deviceCodeScopes {
-		t.Fatalf("Unexpected scope in scope header")
-	}
-	if req.Request.URL.Host != defaultTestAuthorityHost {
-		t.Fatalf("Unexpected default authority host")
-	}
-	if req.Request.URL.Scheme != "https" {
-		t.Fatalf("Wrong request scheme")
-	}
-	if req.Request.URL.Path != "/expected-tenant/oauth2/v2.0/devicecode" {
-		t.Fatalf("Did not set the right path when passing in an empty tenant ID")
 	}
 }
 
@@ -266,7 +136,7 @@ func TestDeviceCodeCredential_GetTokenWithRefreshTokenFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.refreshToken = "refresh_token"
+	// TODO: cred.refreshToken = "refresh_token"
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one")
@@ -291,7 +161,7 @@ func TestDeviceCodeCredential_GetTokenWithRefreshTokenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.refreshToken = "refresh_token"
+	// TODO: cred.refreshToken = "refresh_token"
 	tk, err := cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err != nil {
 		t.Fatalf("Received an unexpected error: %s", err.Error())

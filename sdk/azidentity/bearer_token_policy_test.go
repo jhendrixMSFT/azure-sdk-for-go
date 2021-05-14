@@ -12,6 +12,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 )
 
 const (
@@ -45,7 +46,11 @@ func TestBearerPolicy_SuccessGetToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.client = fakeConfidentialClient{}
+	cred.client = fakeConfidentialClient{
+		ar: confidential.AuthResult{
+			AccessToken: tokenValue,
+		},
+	}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {
@@ -195,7 +200,9 @@ func TestBearerPolicy_GetTokenFailsNoDeadlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.client = fakeConfidentialClient{}
+	cred.client = fakeConfidentialClient{
+		err: errors.New("deadline exceeded"),
+	}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {

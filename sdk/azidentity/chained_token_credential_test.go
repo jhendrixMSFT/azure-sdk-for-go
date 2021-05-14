@@ -8,9 +8,11 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 )
 
 func TestChainedTokenCredential_InstantiateSuccess(t *testing.T) {
@@ -64,7 +66,12 @@ func TestChainedTokenCredential_GetTokenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	secCred.client = fakeConfidentialClient{}
+	secCred.client = fakeConfidentialClient{
+		ar: confidential.AuthResult{
+			AccessToken: tokenValue,
+			ExpiresOn:   time.Now().Add(1 * time.Hour),
+		},
+	}
 	envCred, err := NewEnvironmentCredential(nil)
 	if err != nil {
 		t.Fatalf("Failed to create environment credential: %v", err)
@@ -122,13 +129,18 @@ func TestChainedTokenCredential_GetTokenWithUnavailableCredentialInChain(t *test
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred2.client = fakeConfidentialClient{}
+	cred2.client = fakeConfidentialClient{
+		ar: confidential.AuthResult{
+			AccessToken: tokenValue,
+			ExpiresOn:   time.Now().Add(1 * time.Hour),
+		},
+	}
 	// The chain has the same credential twice, since it doesn't matter what credential we add to the chain as long as it is not a nil credential.
 	// Most credentials will not be instantiated if the conditions do not exist to allow them to be used, thus returning a
 	// CredentialUnavailable error from the constructor. In order to test the CredentialUnavailable functionality for
 	// ChainedTokenCredential we have to mock with two valid credentials, but the first will fail since the first response queued
 	// in the test server is a CredentialUnavailable error.
-	cred, err := NewChainedTokenCredential(cred1, cred2)
+	cred, err := NewChainedTokenCredential(cred2, cred1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

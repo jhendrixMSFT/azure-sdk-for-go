@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 func TestInteractiveBrowserCredential_InvalidTenantID(t *testing.T) {
@@ -32,7 +34,12 @@ func TestInteractiveBrowserCredential_GetTokenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.client = fakePublicClient{}
+	cred.client = fakePublicClient{
+		ar: public.AuthResult{
+			AccessToken: tokenValue,
+			ExpiresOn:   time.Now().Add(1 * time.Hour),
+		},
+	}
 	tk, err := cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{"https://storage.azure.com/.default"}})
 	if err != nil {
 		t.Fatalf("Expected an empty error but received: %v", err)

@@ -99,7 +99,14 @@ func (c *managedIdentityClient) authenticate(ctx context.Context, clientID strin
 		return c.createAccessToken(resp)
 	}
 
-	return nil, &AuthenticationFailedError{inner: newAADAuthenticationFailedError(resp)}
+	b, err := resp.Payload()
+	if err != nil {
+		return nil, newAuthenticationFailedError(fmt.Errorf("%s: failed to read response body %s", resp.Status, err))
+	}
+	if len(b) > 0 {
+		return nil, newAuthenticationFailedError(errors.New(string(b)))
+	}
+	return nil, newAuthenticationFailedError(errors.New(resp.Status))
 }
 
 func (c *managedIdentityClient) createAccessToken(res *azcore.Response) (*azcore.AccessToken, error) {
@@ -146,7 +153,7 @@ func (c *managedIdentityClient) createAuthRequest(ctx context.Context, clientID 
 		// need to perform preliminary request to retreive the secret key challenge provided by the HIMDS service
 		key, err := c.getAzureArcSecretKey(ctx, scopes)
 		if err != nil {
-			return nil, &AuthenticationFailedError{inner: err, msg: "Failed to retreive secret key from the identity endpoint."}
+			return nil, newAuthenticationFailedError(fmt.Errorf("Failed to retreive secret key from the identity endpoint.\n%s", err))
 		}
 		return c.createAzureArcAuthRequest(ctx, key, scopes)
 	case msiTypeCloudShell:
@@ -159,7 +166,7 @@ func (c *managedIdentityClient) createAuthRequest(ctx context.Context, clientID 
 		default:
 			errorMsg = "unknown"
 		}
-		return nil, &CredentialUnavailableError{credentialType: "Managed Identity Credential", message: "Make sure you are running in a valid Managed Identity Environment. Status: " + errorMsg}
+		return nil, newCredentialUnavailableError("Managed Identity Credential", "Make sure you are running in a valid Managed Identity Environment. Status: "+errorMsg)
 	}
 }
 
@@ -225,7 +232,11 @@ func (c *managedIdentityClient) getAzureArcSecretKey(ctx context.Context, resour
 	// the endpoint is expected to return a 401 with the WWW-Authenticte header set to the location
 	// of the secret key file. Any other status code indicates an error in the request.
 	if response.StatusCode != 401 {
-		return "", &AuthenticationFailedError{inner: newAADAuthenticationFailedError(response), msg: fmt.Sprintf("Expected a 401 Unauthorized response, received: %d", response.StatusCode)}
+		b, err := response.Payload()
+		if err != nil {
+			return "", newAuthenticationFailedError(fmt.Errorf("%s: failed to read response body %s", response.Status, err))
+		}
+		return "", newAuthenticationFailedError(fmt.Errorf("Expected a 401 Unauthorized response, received: %d\n%s", response.StatusCode, string(b)))
 	}
 	header := response.Header.Get("WWW-Authenticate")
 	if len(header) == 0 {
@@ -293,14 +304,14 @@ func (c *managedIdentityClient) getMSIType() (msiType, error) {
 				c.msiType = msiTypeAzureArc
 			} else {
 				c.msiType = msiTypeUnavailable
-				return c.msiType, &CredentialUnavailableError{credentialType: "Managed Identity Credential", message: "This Managed Identity Environment is not supported yet"}
+				return c.msiType, newCredentialUnavailableError("Managed Identity Credential", "This Managed Identity Environment is not supported yet")
 			}
 		} else if c.imdsAvailable() { // if MSI_ENDPOINT is NOT set AND the IMDS endpoint is available the msiType is IMDS. This will timeout after 500 milliseconds
 			c.endpoint = imdsEndpoint
 			c.msiType = msiTypeIMDS
 		} else { // if MSI_ENDPOINT is NOT set and IMDS endpoint is not available Managed Identity is not available
 			c.msiType = msiTypeUnavailable
-			return c.msiType, &CredentialUnavailableError{credentialType: "Managed Identity Credential", message: "Make sure you are running in a valid Managed Identity Environment"}
+			return c.msiType, newCredentialUnavailableError("Managed Identity Credential", "Make sure you are running in a valid Managed Identity Environment")
 		}
 	}
 	return c.msiType, nil

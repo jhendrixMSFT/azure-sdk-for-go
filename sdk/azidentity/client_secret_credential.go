@@ -41,7 +41,7 @@ type ClientSecretCredential struct {
 // options: allow to configure the management of the requests sent to Azure Active Directory.
 func NewClientSecretCredential(tenantID string, clientID string, clientSecret string, options *ClientSecretCredentialOptions) (*ClientSecretCredential, error) {
 	if !validTenantID(tenantID) {
-		return nil, &CredentialUnavailableError{credentialType: "Client Secret Credential", message: tenantIDValidationErr}
+		return nil, newCredentialUnavailableError("Client Secret Credential", tenantIDValidationErr)
 	}
 	if options == nil {
 		options = &ClientSecretCredentialOptions{}
@@ -81,7 +81,7 @@ func (c *ClientSecretCredential) GetToken(ctx context.Context, opts azcore.Token
 	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Secret Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

@@ -47,7 +47,7 @@ type AuthorizationCodeCredential struct {
 // options: Manage the configuration of the requests sent to Azure Active Directory, they can also include a client secret for web app authentication.
 func NewAuthorizationCodeCredential(tenantID string, clientID string, authCode string, redirectURL string, options *AuthorizationCodeCredentialOptions) (*AuthorizationCodeCredential, error) {
 	if !validTenantID(tenantID) {
-		return nil, &CredentialUnavailableError{credentialType: "Authorization Code Credential", message: tenantIDValidationErr}
+		return nil, newCredentialUnavailableError("Authorization Code Credential", tenantIDValidationErr)
 	}
 	if options == nil {
 		options = &AuthorizationCodeCredentialOptions{}

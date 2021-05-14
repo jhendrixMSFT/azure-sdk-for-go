@@ -46,7 +46,7 @@ type UsernamePasswordCredential struct {
 // options: UsernamePasswordCredentialOptions used to configure the pipeline for the requests sent to Azure Active Directory.
 func NewUsernamePasswordCredential(tenantID string, clientID string, username string, password string, options *UsernamePasswordCredentialOptions) (*UsernamePasswordCredential, error) {
 	if !validTenantID(tenantID) {
-		return nil, &CredentialUnavailableError{credentialType: "Username Password Credential", message: tenantIDValidationErr}
+		return nil, newCredentialUnavailableError("Username Password Credential", tenantIDValidationErr)
 	}
 	if options == nil {
 		options = &UsernamePasswordCredentialOptions{}

@@ -56,18 +56,18 @@ type ClientCertificateCredential struct {
 // options: ClientCertificateCredentialOptions that can be used to provide additional configurations for the credential, such as the certificate password.
 func NewClientCertificateCredential(tenantID string, clientID string, certificatePath string, options *ClientCertificateCredentialOptions) (*ClientCertificateCredential, error) {
 	if !validTenantID(tenantID) {
-		return nil, &CredentialUnavailableError{credentialType: "Client Certificate Credential", message: tenantIDValidationErr}
+		return nil, newCredentialUnavailableError("Client Certificate Credential", tenantIDValidationErr)
 	}
 	_, err := os.Stat(certificatePath)
 	if err != nil {
-		credErr := &CredentialUnavailableError{credentialType: "Client Certificate Credential", message: "Certificate file not found in path: " + certificatePath}
-		logCredentialError(credErr.credentialType, credErr)
+		credErr := newCredentialUnavailableError("Client Certificate Credential", "Certificate file not found in path: "+certificatePath)
+		logCredentialError(credErr.CredentialUnavailable(), credErr)
 		return nil, credErr
 	}
 	certData, err := ioutil.ReadFile(certificatePath)
 	if err != nil {
-		credErr := &CredentialUnavailableError{credentialType: "Client Certificate Credential", message: err.Error()}
-		logCredentialError(credErr.credentialType, credErr)
+		credErr := newCredentialUnavailableError("Client Certificate Credential", err.Error())
+		logCredentialError(credErr.CredentialUnavailable(), credErr)
 		return nil, credErr
 	}
 	if options == nil {
@@ -83,8 +83,8 @@ func NewClientCertificateCredential(tenantID string, clientID string, certificat
 		err = errors.New("only PEM and PFX files are supported")
 	}
 	if err != nil {
-		credErr := &CredentialUnavailableError{credentialType: "Client Certificate Credential", message: err.Error()}
-		logCredentialError(credErr.credentialType, credErr)
+		credErr := newCredentialUnavailableError("Client Certificate Credential", err.Error())
+		logCredentialError(credErr.CredentialUnavailable(), credErr)
 		return nil, credErr
 	}
 	authorityHost, err := setAuthorityHost(options.AuthorityHost)

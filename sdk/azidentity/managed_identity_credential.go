@@ -47,8 +47,8 @@ func NewManagedIdentityCredential(clientID string, options *ManagedIdentityCrede
 	msiType, err := client.getMSIType()
 	// If there is an error that means that the code is not running in a Managed Identity environment
 	if err != nil {
-		credErr := &CredentialUnavailableError{credentialType: "Managed Identity Credential", message: "Please make sure you are running in a managed identity environment, such as a VM, Azure Functions, Cloud Shell, etc..."}
-		logCredentialError(credErr.credentialType, credErr)
+		credErr := newCredentialUnavailableError("Managed Identity Credential", "Please make sure you are running in a managed identity environment, such as a VM, Azure Functions, Cloud Shell, etc...")
+		logCredentialError(credErr.CredentialUnavailable(), credErr)
 		return nil, credErr
 	}
 	// Assign the msiType discovered onto the client

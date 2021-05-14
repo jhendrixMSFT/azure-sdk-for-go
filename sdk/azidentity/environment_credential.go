@@ -50,14 +50,14 @@ func NewEnvironmentCredential(options *EnvironmentCredentialOptions) (*Environme
 	}
 	tenantID := os.Getenv("AZURE_TENANT_ID")
 	if tenantID == "" {
-		err := &CredentialUnavailableError{credentialType: "Environment Credential", message: "Missing environment variable AZURE_TENANT_ID"}
-		logCredentialError(err.credentialType, err)
+		err := newCredentialUnavailableError("Environment Credential", "Missing environment variable AZURE_TENANT_ID")
+		logCredentialError(err.CredentialUnavailable(), err)
 		return nil, err
 	}
 	clientID := os.Getenv("AZURE_CLIENT_ID")
 	if clientID == "" {
-		err := &CredentialUnavailableError{credentialType: "Environment Credential", message: "Missing environment variable AZURE_CLIENT_ID"}
-		logCredentialError(err.credentialType, err)
+		err := newCredentialUnavailableError("Environment Credential", "Missing environment variable AZURE_CLIENT_ID")
+		logCredentialError(err.CredentialUnavailable(), err)
 		return nil, err
 	}
 	if clientSecret := os.Getenv("AZURE_CLIENT_SECRET"); clientSecret != "" {
@@ -86,8 +86,8 @@ func NewEnvironmentCredential(options *EnvironmentCredentialOptions) (*Environme
 			return &EnvironmentCredential{cred: cred}, nil
 		}
 	}
-	err := &CredentialUnavailableError{credentialType: "Environment Credential", message: "Missing environment variable AZURE_CLIENT_SECRET or AZURE_CLIENT_CERTIFICATE_PATH or AZURE_USERNAME and AZURE_PASSWORD"}
-	logCredentialError(err.credentialType, err)
+	err := newCredentialUnavailableError("Environment Credential", "Missing environment variable AZURE_CLIENT_SECRET or AZURE_CLIENT_CERTIFICATE_PATH or AZURE_USERNAME and AZURE_PASSWORD")
+	logCredentialError(err.CredentialUnavailable(), err)
 	return nil, err
 }
 

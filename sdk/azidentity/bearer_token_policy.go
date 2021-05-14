@@ -4,6 +4,7 @@
 package azidentity
 
 import (
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -45,7 +46,7 @@ func newBearerTokenPolicy(creds azcore.TokenCredential, opts azcore.Authenticati
 func (b *bearerTokenPolicy) Do(req *azcore.Request) (*azcore.Response, error) {
 	if req.URL.Scheme != "https" {
 		// HTTPS must be used, otherwise the tokens are at the risk of being exposed
-		return nil, &AuthenticationFailedError{msg: "token credentials require a URL using the HTTPS protocol scheme"}
+		return nil, newAuthenticationFailedError(errors.New("token credentials require a URL using the HTTPS protocol scheme"))
 	}
 	// create a "refresh window" before the token's real expiration date.
 	// this allows callers to continue to use the old token while the

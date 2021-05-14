@@ -26,7 +26,7 @@ func TestAuthorizationCodeCredential_InvalidTenantID(t *testing.T) {
 	if cred != nil {
 		t.Fatalf("Expected a nil credential value. Received: %v", cred)
 	}
-	var errType *CredentialUnavailableError
+	var errType CredentialUnavailableError
 	if !errors.As(err, &errType) {
 		t.Fatalf("Did not receive a CredentialUnavailableError. Received: %t", err)
 	}
@@ -66,36 +66,9 @@ func TestAuthorizationCodeCredential_GetTokenInvalidCredentials(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one.")
 	}
-	var authFailed *AuthenticationFailedError
+	var authFailed AuthenticationFailedError
 	if !errors.As(err, &authFailed) {
 		t.Fatalf("Expected: AuthenticationFailedError, Received: %T", err)
-	} else {
-		var respError *AADAuthenticationFailedError
-		if !errors.As(authFailed.Unwrap(), &respError) {
-			t.Fatalf("Expected: AADAuthenticationFailedError, Received: %T", err)
-		} else {
-			if len(respError.Message) == 0 {
-				t.Fatalf("Did not receive an error message")
-			}
-			if len(respError.Description) == 0 {
-				t.Fatalf("Did not receive an error description")
-			}
-			if len(respError.Timestamp) == 0 {
-				t.Fatalf("Did not receive a timestamp")
-			}
-			if len(respError.TraceID) == 0 {
-				t.Fatalf("Did not receive a TraceID")
-			}
-			if len(respError.CorrelationID) == 0 {
-				t.Fatalf("Did not receive a CorrelationID")
-			}
-			if len(respError.URL) == 0 {
-				t.Fatalf("Did not receive an error URL")
-			}
-			if respError.Response == nil {
-				t.Fatalf("Did not receive an error response")
-			}
-		}
 	}
 }
 

@@ -43,7 +43,7 @@ func TestEnvironmentCredential_TenantIDNotSet(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but received nil")
 	}
-	var credentialUnavailable *CredentialUnavailableError
+	var credentialUnavailable CredentialUnavailableError
 	if !errors.As(err, &credentialUnavailable) {
 		t.Fatalf("Expected a credential unavailable error, instead received: %T", err)
 	}
@@ -63,7 +63,7 @@ func TestEnvironmentCredential_ClientIDNotSet(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but received nil")
 	}
-	var credentialUnavailable *CredentialUnavailableError
+	var credentialUnavailable CredentialUnavailableError
 	if !errors.As(err, &credentialUnavailable) {
 		t.Fatalf("Expected a credential unavailable error, instead received: %T", err)
 	}
@@ -83,7 +83,7 @@ func TestEnvironmentCredential_ClientSecretNotSet(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but received nil")
 	}
-	var credentialUnavailable *CredentialUnavailableError
+	var credentialUnavailable CredentialUnavailableError
 	if !errors.As(err, &credentialUnavailable) {
 		t.Fatalf("Expected a credential unavailable error, instead received: %T", err)
 	}
@@ -153,7 +153,7 @@ func TestEnvironmentCredential_UsernameOnlySet(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but received nil")
 	}
-	var credentialUnavailable *CredentialUnavailableError
+	var credentialUnavailable CredentialUnavailableError
 	if !errors.As(err, &credentialUnavailable) {
 		t.Fatalf("Expected a credential unavailable error, instead received: %T", err)
 	}

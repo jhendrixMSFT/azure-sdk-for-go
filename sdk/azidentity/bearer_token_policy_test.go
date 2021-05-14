@@ -78,7 +78,7 @@ func TestBearerPolicy_CredentialFailGetToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := pipeline.Do(req)
-	var afe *AuthenticationFailedError
+	var afe AuthenticationFailedError
 	if !errors.As(err, &afe) {
 		t.Fatalf("unexpected error type %v", err)
 	}
@@ -137,7 +137,7 @@ func TestRetryPolicy_NonRetriable(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = pipeline.Do(req)
-	var afe *AuthenticationFailedError
+	var afe AuthenticationFailedError
 	if !errors.As(err, &afe) {
 		t.Fatalf("unexpected error type %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRetryPolicy_HTTPRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = pipeline.Do(req)
-	var afe *AuthenticationFailedError
+	var afe AuthenticationFailedError
 	if !errors.As(err, &afe) {
 		t.Fatalf("unexpected error type %v", err)
 	}

@@ -31,7 +31,7 @@ func TestDeviceCodeCredential_InvalidTenantID(t *testing.T) {
 	if cred != nil {
 		t.Fatalf("Expected a nil credential value. Received: %v", cred)
 	}
-	var errType *CredentialUnavailableError
+	var errType CredentialUnavailableError
 	if !errors.As(err, &errType) {
 		t.Fatalf("Did not receive a CredentialUnavailableError. Received: %t", err)
 	}
@@ -141,7 +141,7 @@ func TestDeviceCodeCredential_GetTokenWithRefreshTokenFailure(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one")
 	}
-	var aadErr *AADAuthenticationFailedError
+	var aadErr AuthenticationFailedError
 	if !errors.As(err, &aadErr) {
 		t.Fatalf("Did not receive an AADAuthenticationFailedError but was expecting one")
 	}

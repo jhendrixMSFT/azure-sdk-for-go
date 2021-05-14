@@ -81,7 +81,7 @@ func NewDeviceCodeCredential(options *DeviceCodeCredentialOptions) (*DeviceCodeC
 	}
 	cp.init()
 	if !validTenantID(cp.TenantID) {
-		return nil, &CredentialUnavailableError{credentialType: "Device Code Credential", message: tenantIDValidationErr}
+		return nil, newCredentialUnavailableError("Device Code Credential", tenantIDValidationErr)
 	}
 	authorityHost, err := setAuthorityHost(cp.AuthorityHost)
 	if err != nil {

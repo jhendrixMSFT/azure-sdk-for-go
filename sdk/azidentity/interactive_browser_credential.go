@@ -24,7 +24,7 @@ type InteractiveBrowserCredentialOptions struct {
 	// The client secret that was generated for the App Registration used to authenticate the client. Only applies for web apps.
 	ClientSecret string
 	// The redirect URL used to request the authorization code. Must be the same URL that is configured for the App Registration.
-	RedirectURL string // TODO:  remove?
+	RedirectURL string
 	// The localhost port for the local server that will be used to redirect back.
 	// By default, a random port number will be selected.
 	Port int
@@ -54,9 +54,9 @@ func (o *InteractiveBrowserCredentialOptions) init() {
 
 // InteractiveBrowserCredential enables authentication to Azure Active Directory using an interactive browser to log in.
 type InteractiveBrowserCredential struct {
-	client public.Client
-	// options contains data necessary to authenticate through an interactive browser window
-	options InteractiveBrowserCredentialOptions
+	client      publicClient
+	port        int
+	redirectURL string
 }
 
 // NewInteractiveBrowserCredential constructs a new InteractiveBrowserCredential with the details needed to authenticate against Azure Active Directory through an interactive browser window.
@@ -74,14 +74,14 @@ func NewInteractiveBrowserCredential(options *InteractiveBrowserCredentialOption
 	if err != nil {
 		return nil, err
 	}
-	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: cp.HTTPClient, Retry: cp.Retry, Telemetry: cp.Telemetry, Logging: cp.Logging})
 	c, err := public.New(cp.ClientID,
 		public.WithAuthority(azcore.JoinPaths(authorityHost, cp.TenantID)),
 		public.WithHTTPClient(pipelineAdapter{pl: pipeline}))
 	if err != nil {
 		return nil, err
 	}
-	return &InteractiveBrowserCredential{options: cp, client: c}, nil
+	return &InteractiveBrowserCredential{client: c, port: cp.Port, redirectURL: cp.RedirectURL}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory using an interactive browser to authenticate.
@@ -89,11 +89,11 @@ func NewInteractiveBrowserCredential(options *InteractiveBrowserCredentialOption
 // opts: TokenRequestOptions contains the list of scopes for which the token will have access.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *InteractiveBrowserCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
-	// TODO: wire up custom port number
+	// TODO: wire up custom port number/redirect URL (which is only used for port)
 	tk, err := c.client.AcquireTokenInteractive(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Interactive Browser Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

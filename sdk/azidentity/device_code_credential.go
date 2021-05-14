@@ -68,7 +68,7 @@ type DeviceCodeMessage = public.DeviceCodeResult
 // DeviceCodeCredential authenticates a user using the device code flow, and provides access tokens for that user account.
 // For more information on the device code authentication flow see: https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-device-code.
 type DeviceCodeCredential struct {
-	client     public.Client
+	client     publicClient
 	userPrompt func(DeviceCodeMessage) // Sends the user a message with a verification URL and device code to sign in to the login server
 }
 
@@ -87,7 +87,7 @@ func NewDeviceCodeCredential(options *DeviceCodeCredentialOptions) (*DeviceCodeC
 	if err != nil {
 		return nil, err
 	}
-	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: options.HTTPClient, Retry: options.Retry, Telemetry: options.Telemetry, Logging: options.Logging})
+	pipeline := newDefaultPipeline(pipelineOptions{HTTPClient: cp.HTTPClient, Retry: cp.Retry, Telemetry: cp.Telemetry, Logging: cp.Logging})
 	c, err := public.New(cp.ClientID,
 		public.WithAuthority(azcore.JoinPaths(authorityHost, cp.TenantID)),
 		public.WithHTTPClient(pipelineAdapter{pl: pipeline}))
@@ -107,13 +107,13 @@ func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts azcore.TokenRe
 	dc, err := c.client.AcquireTokenByDeviceCode(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	c.userPrompt(dc.Result)
 	tk, err := dc.AuthenticationResult(ctx)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

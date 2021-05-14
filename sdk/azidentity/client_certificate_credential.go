@@ -46,7 +46,7 @@ type ClientCertificateCredentialOptions struct {
 // on how to configure certificate authentication can be found here:
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/active-directory-certificate-credentials#register-your-certificate-with-azure-ad
 type ClientCertificateCredential struct {
-	client confidential.Client
+	client confidentialClient
 }
 
 // NewClientCertificateCredential creates an instance of ClientCertificateCredential with the details needed to authenticate against Azure Active Directory with the specified certificate.
@@ -222,7 +222,7 @@ func (c *ClientCertificateCredential) GetToken(ctx context.Context, opts azcore.
 	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Certificate Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

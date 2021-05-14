@@ -67,7 +67,7 @@ func (c *ManagedIdentityCredential) GetToken(ctx context.Context, opts azcore.To
 	tk, err := c.client.authenticate(ctx, c.clientID, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Managed Identity Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	logMSIEnv(c.client.msiType)

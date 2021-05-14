@@ -32,7 +32,7 @@ type UsernamePasswordCredentialOptions struct {
 // credential will fail to get a token returning an AuthenticationFailureError. Also, this credential requires a high degree of trust and is not
 // recommended outside of prototyping when more secure credentials can be used.
 type UsernamePasswordCredential struct {
-	client   public.Client
+	client   publicClient
 	username string // Gets the user account's user name
 	password string // Gets the user account's password
 }
@@ -73,7 +73,7 @@ func (c *UsernamePasswordCredential) GetToken(ctx context.Context, opts azcore.T
 	tk, err := c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
 	if err != nil {
 		addGetTokenFailureLogs("Username Password Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

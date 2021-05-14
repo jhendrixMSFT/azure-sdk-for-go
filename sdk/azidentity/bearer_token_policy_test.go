@@ -45,6 +45,7 @@ func TestBearerPolicy_SuccessGetToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakeConfidentialClient{}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {
@@ -71,6 +72,9 @@ func TestBearerPolicy_CredentialFailGetToken(t *testing.T) {
 	cred, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, &options)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	cred.client = fakeConfidentialClient{
+		err: errors.New("invalid client secret"),
 	}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
@@ -103,6 +107,7 @@ func TestBearerTokenPolicy_TokenExpired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakeConfidentialClient{}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {
@@ -131,6 +136,9 @@ func TestRetryPolicy_NonRetriable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakeConfidentialClient{
+		err: errors.New("invalid client secret"),
+	}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {
@@ -153,6 +161,9 @@ func TestRetryPolicy_HTTPRequest(t *testing.T) {
 	cred, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, &options)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	cred.client = fakeConfidentialClient{
+		err: errors.New("invalid client secret"),
 	}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
@@ -184,6 +195,7 @@ func TestBearerPolicy_GetTokenFailsNoDeadlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakeConfidentialClient{}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {
@@ -192,6 +204,10 @@ func TestBearerPolicy_GetTokenFailsNoDeadlock(t *testing.T) {
 	resp, err := pipeline.Do(req)
 	if err == nil {
 		t.Fatal("unexpected nil error")
+	}
+	var afe AuthenticationFailedError
+	if !errors.As(err, &afe) {
+		t.Fatalf("unexpected error type %v", err)
 	}
 	if resp != nil {
 		t.Fatal("expected nil response")

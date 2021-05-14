@@ -28,16 +28,12 @@ func TestUsernamePasswordCredential_InvalidTenantID(t *testing.T) {
 }
 
 func TestUsernamePasswordCredential_GetTokenSuccess(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
 	options := UsernamePasswordCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
 	cred, err := NewUsernamePasswordCredential(tenantID, clientID, "username", "password", &options)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{scope}})
 	if err != nil {
 		t.Fatalf("Expected an empty error but received: %s", err.Error())
@@ -45,26 +41,27 @@ func TestUsernamePasswordCredential_GetTokenSuccess(t *testing.T) {
 }
 
 func TestUsernamePasswordCredential_GetTokenInvalidCredentials(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.SetResponse(mock.WithStatusCode(http.StatusUnauthorized))
 	options := UsernamePasswordCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
 	cred, err := NewUsernamePasswordCredential(tenantID, clientID, "username", "wrong_password", &options)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{
+		err: errors.New("bad user-name or password"),
+	}
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{scope}})
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one.")
+	}
+	var authFailed AuthenticationFailedError
+	if !errors.As(err, &authFailed) {
+		t.Fatalf("Expected: AuthenticationFailedError, Received: %T", err)
 	}
 }
 
 func TestBearerPolicy_UsernamePasswordCredential(t *testing.T) {
 	srv, close := mock.NewTLSServer()
 	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
 	srv.AppendResponse(mock.WithStatusCode(http.StatusOK))
 	options := UsernamePasswordCredentialOptions{}
 	options.AuthorityHost = srv.URL()
@@ -73,6 +70,7 @@ func TestBearerPolicy_UsernamePasswordCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	pipeline := defaultTestPipeline(srv, cred, scope)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {

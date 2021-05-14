@@ -60,21 +60,12 @@ func TestChainedTokenCredential_InstantiateFailure(t *testing.T) {
 }
 
 func TestChainedTokenCredential_GetTokenSuccess(t *testing.T) {
-	err := initEnvironmentVarsForTest()
-	if err != nil {
-		t.Fatalf("Could not set environment variables for testing: %v", err)
-	}
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	options := ClientSecretCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
-	secCred, err := NewClientSecretCredential(tenantID, clientID, secret, &options)
+	secCred, err := NewClientSecretCredential(tenantID, clientID, secret, nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	envCred, err := NewEnvironmentCredential(&EnvironmentCredentialOptions{HTTPClient: srv, AuthorityHost: srv.URL()})
+	secCred.client = fakeConfidentialClient{}
+	envCred, err := NewEnvironmentCredential(nil)
 	if err != nil {
 		t.Fatalf("Failed to create environment credential: %v", err)
 	}
@@ -95,15 +86,12 @@ func TestChainedTokenCredential_GetTokenSuccess(t *testing.T) {
 }
 
 func TestChainedTokenCredential_GetTokenFail(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithStatusCode(http.StatusUnauthorized))
-	options := ClientSecretCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
-	secCred, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, &options)
+	secCred, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	secCred.client = fakeConfidentialClient{
+		err: errors.New("invalid client secret"),
 	}
 	cred, err := NewChainedTokenCredential(secCred)
 	if err != nil {
@@ -123,23 +111,24 @@ func TestChainedTokenCredential_GetTokenFail(t *testing.T) {
 }
 
 func TestChainedTokenCredential_GetTokenWithUnavailableCredentialInChain(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendError(newCredentialUnavailableError("MockCredential", "Mocking a credential unavailable error"))
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	options := ClientSecretCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
-	secCred, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, &options)
+	cred1, err := NewClientSecretCredential(tenantID, clientID, wrongSecret, nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred1.client = fakeConfidentialClient{
+		err: errors.New("invalid client secret"),
+	}
+	cred2, err := NewClientSecretCredential(tenantID, clientID, secret, nil)
+	if err != nil {
+		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	cred2.client = fakeConfidentialClient{}
 	// The chain has the same credential twice, since it doesn't matter what credential we add to the chain as long as it is not a nil credential.
 	// Most credentials will not be instantiated if the conditions do not exist to allow them to be used, thus returning a
 	// CredentialUnavailable error from the constructor. In order to test the CredentialUnavailable functionality for
 	// ChainedTokenCredential we have to mock with two valid credentials, but the first will fail since the first response queued
 	// in the test server is a CredentialUnavailable error.
-	cred, err := NewChainedTokenCredential(secCred, secCred)
+	cred, err := NewChainedTokenCredential(cred1, cred2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,6 +160,7 @@ func TestBearerPolicy_ChainedTokenCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakeConfidentialClient{}
 	chainedCred, err := NewChainedTokenCredential(cred)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 const (
@@ -38,17 +39,14 @@ func TestDeviceCodeCredential_InvalidTenantID(t *testing.T) {
 }
 
 func TestDeviceCodeCredential_GetTokenSuccess(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(deviceCodeResponse)))
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	srv.AppendResponse(mock.WithStatusCode(http.StatusOK))
-	options := DeviceCodeCredentialOptions{}
-	options.AuthorityHost = srv.URL()
-	options.HTTPClient = srv
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	cred.client = fakePublicClient{
+		ar: public.AuthResult{
+			AccessToken: "new_token",
+		},
 	}
 	tk, err := cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err != nil {
@@ -60,41 +58,31 @@ func TestDeviceCodeCredential_GetTokenSuccess(t *testing.T) {
 }
 
 func TestDeviceCodeCredential_GetTokenInvalidCredentials(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.SetResponse(mock.WithStatusCode(http.StatusUnauthorized))
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	options.HTTPClient = srv
-	options.AuthorityHost = srv.URL()
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
+	}
+	cred.client = fakePublicClient{
+		err: errors.New("invalid credentials"),
 	}
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one.")
 	}
+	var authFailed AuthenticationFailedError
+	if !errors.As(err, &authFailed) {
+		t.Fatalf("Expected: AuthenticationFailedError, Received: %T", err)
+	}
 }
 
 func TestDeviceCodeCredential_GetTokenAuthorizationPending(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(deviceCodeResponse)))
-	srv.AppendResponse(mock.WithBody([]byte(authorizationPendingResponse)), mock.WithStatusCode(http.StatusUnauthorized))
-	srv.AppendResponse(mock.WithBody([]byte(authorizationPendingResponse)), mock.WithStatusCode(http.StatusUnauthorized))
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	options.HTTPClient = srv
-	options.AuthorityHost = srv.URL()
-	options.UserPrompt = func(DeviceCodeMessage) {}
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(&DeviceCodeCredentialOptions{
+		UserPrompt: func(DeviceCodeMessage) {},
+	})
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err != nil {
 		t.Fatalf("Expected an empty error but received %v", err)
@@ -102,40 +90,27 @@ func TestDeviceCodeCredential_GetTokenAuthorizationPending(t *testing.T) {
 }
 
 func TestDeviceCodeCredential_GetTokenExpiredToken(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(deviceCodeResponse)))
-	srv.AppendResponse(mock.WithBody([]byte(authorizationPendingResponse)), mock.WithStatusCode(http.StatusUnauthorized))
-	srv.AppendResponse(mock.WithBody([]byte(expiredTokenResponse)), mock.WithStatusCode(http.StatusUnauthorized))
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	options.HTTPClient = srv
-	options.AuthorityHost = srv.URL()
-	options.UserPrompt = func(DeviceCodeMessage) {}
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err == nil {
 		t.Fatalf("Expected an error but received none")
 	}
+	var authFailed AuthenticationFailedError
+	if !errors.As(err, &authFailed) {
+		t.Fatalf("Expected: AuthenticationFailedError, Received: %T", err)
+	}
 }
 
 func TestDeviceCodeCredential_GetTokenWithRefreshTokenFailure(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespError)), mock.WithStatusCode(http.StatusUnauthorized))
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	options.HTTPClient = srv
-	options.AuthorityHost = srv.URL()
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	// TODO: cred.refreshToken = "refresh_token"
 	_, err = cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err == nil {
@@ -148,19 +123,11 @@ func TestDeviceCodeCredential_GetTokenWithRefreshTokenFailure(t *testing.T) {
 }
 
 func TestDeviceCodeCredential_GetTokenWithRefreshTokenSuccess(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	options := DeviceCodeCredentialOptions{}
-	options.ClientID = clientID
-	options.TenantID = tenantID
-	options.HTTPClient = srv
-	options.AuthorityHost = srv.URL()
-	options.UserPrompt = func(DeviceCodeMessage) {}
-	cred, err := NewDeviceCodeCredential(&options)
+	cred, err := NewDeviceCodeCredential(nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	// TODO: cred.refreshToken = "refresh_token"
 	tk, err := cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err != nil {
@@ -187,6 +154,7 @@ func TestBearerPolicy_DeviceCodeCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
+	cred.client = fakePublicClient{}
 	pipeline := defaultTestPipeline(srv, cred, deviceCodeScopes)
 	req, err := azcore.NewRequest(context.Background(), http.MethodGet, srv.URL())
 	if err != nil {

@@ -5,6 +5,7 @@ package azidentity
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 const (
@@ -168,4 +171,20 @@ func (p pipelineAdapter) Do(r *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	return resp.Response, err
+}
+
+// enables fakes for test scenarios
+type confidentialClient interface {
+	AcquireTokenSilent(ctx context.Context, scopes []string, options ...confidential.AcquireTokenSilentOption) (confidential.AuthResult, error)
+	AcquireTokenByAuthCode(ctx context.Context, code string, redirectURI string, scopes []string, options ...confidential.AcquireTokenByAuthCodeOption) (confidential.AuthResult, error)
+	AcquireTokenByCredential(ctx context.Context, scopes []string) (confidential.AuthResult, error)
+}
+
+// enables fakes for test scenarios
+type publicClient interface {
+	AcquireTokenSilent(ctx context.Context, scopes []string, options ...public.AcquireTokenSilentOption) (public.AuthResult, error)
+	AcquireTokenByUsernamePassword(ctx context.Context, scopes []string, username string, password string) (public.AuthResult, error)
+	AcquireTokenByDeviceCode(ctx context.Context, scopes []string) (public.DeviceCode, error)
+	AcquireTokenByAuthCode(ctx context.Context, code string, redirectURI string, scopes []string, options ...public.AcquireTokenByAuthCodeOption) (public.AuthResult, error)
+	AcquireTokenInteractive(ctx context.Context, scopes []string, options ...public.InteractiveAuthOption) (public.AuthResult, error)
 }

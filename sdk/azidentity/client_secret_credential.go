@@ -31,7 +31,7 @@ type ClientSecretCredentialOptions struct {
 // to configure a client secret can be found here:
 // https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-configure-app-access-web-apis#add-credentials-to-your-web-application
 type ClientSecretCredential struct {
-	client confidential.Client
+	client confidentialClient
 }
 
 // NewClientSecretCredential constructs a new ClientSecretCredential with the details needed to authenticate against Azure Active Directory with a client secret.

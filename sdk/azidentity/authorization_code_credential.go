@@ -33,7 +33,7 @@ type AuthorizationCodeCredentialOptions struct {
 // that was obtained through the authorization code flow, described in more detail in the Azure Active Directory
 // documentation: https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow.
 type AuthorizationCodeCredential struct {
-	client       public.Client
+	client       publicClient
 	authCode     string // The authorization code received from the authorization code flow. The authorization code must not have been used to obtain another token.
 	clientSecret string // Gets the client secret that was generated for the App Registration used to authenticate the client.
 	redirectURI  string // The redirect URI that was used to request the authorization code. Must be the same URI that is configured for the App Registration.
@@ -74,7 +74,7 @@ func (c *AuthorizationCodeCredential) GetToken(ctx context.Context, opts azcore.
 	tk, err := c.client.AcquireTokenByAuthCode(ctx, c.authCode, c.redirectURI, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Authorization Code Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err)
 	}
 	logGetTokenSuccess(c, opts)
 	return &azcore.AccessToken{

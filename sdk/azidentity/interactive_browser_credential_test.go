@@ -44,7 +44,7 @@ func TestInteractiveBrowserCredential_GetTokenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected an empty error but received: %v", err)
 	}
-	if tk.Token != "new_token" {
+	if tk.Token != tokenValue {
 		t.Fatal("Received unexpected token")
 	}
 }

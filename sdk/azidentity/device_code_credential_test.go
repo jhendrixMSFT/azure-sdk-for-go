@@ -45,14 +45,17 @@ func TestDeviceCodeCredential_GetTokenSuccess(t *testing.T) {
 	}
 	cred.client = fakePublicClient{
 		ar: public.AuthResult{
-			AccessToken: "new_token",
+			AccessToken: tokenValue,
+		},
+		dc: public.DeviceCode{
+			Result: public.DeviceCodeResult{},
 		},
 	}
 	tk, err := cred.GetToken(context.Background(), azcore.TokenRequestOptions{Scopes: []string{deviceCodeScopes}})
 	if err != nil {
 		t.Fatalf("Expected an empty error but received: %s", err.Error())
 	}
-	if tk.Token != "new_token" {
+	if tk.Token != tokenValue {
 		t.Fatalf("Received an unexpected value in azcore.AccessToken.Token")
 	}
 }
@@ -133,7 +136,7 @@ func TestDeviceCodeCredential_GetTokenWithRefreshTokenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Received an unexpected error: %s", err.Error())
 	}
-	if tk.Token != "new_token" {
+	if tk.Token != tokenValue {
 		t.Fatalf("Unexpected value for token")
 	}
 }

@@ -89,8 +89,16 @@ func NewInteractiveBrowserCredential(options *InteractiveBrowserCredentialOption
 // opts: TokenRequestOptions contains the list of scopes for which the token will have access.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *InteractiveBrowserCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
+	// check for cached token
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
 	// TODO: wire up custom port number/redirect URL (which is only used for port)
-	tk, err := c.client.AcquireTokenInteractive(ctx, opts.Scopes)
+	tk, err = c.client.AcquireTokenInteractive(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Interactive Browser Credential", err, true)
 		return nil, newAuthenticationFailedError(err)

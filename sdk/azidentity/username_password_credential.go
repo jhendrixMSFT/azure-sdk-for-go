@@ -70,7 +70,15 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 // ctx: The context used to control the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *UsernamePasswordCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
+	// check for cached token
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
+	tk, err = c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
 	if err != nil {
 		addGetTokenFailureLogs("Username Password Credential", err, true)
 		return nil, newAuthenticationFailedError(err)

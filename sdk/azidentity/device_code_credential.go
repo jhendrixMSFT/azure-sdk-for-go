@@ -111,6 +111,14 @@ func NewDeviceCodeCredential(options *DeviceCodeCredentialOptions) (*DeviceCodeC
 // ctx: The context for controlling the request lifetime.
 // Returns an AccessToken which can be used to authenticate service client calls.
 func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts azcore.TokenRequestOptions) (*azcore.AccessToken, error) {
+	// check for cached token
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
 	dc, err := c.client.AcquireTokenByDeviceCode(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)
@@ -121,7 +129,7 @@ func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts azcore.TokenRe
 		VerificationURL: dc.Result.VerificationURL,
 		Message:         dc.Result.Message,
 	})
-	tk, err := dc.AuthenticationResult(ctx)
+	tk, err = dc.AuthenticationResult(ctx)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)
 		return nil, newAuthenticationFailedError(err)

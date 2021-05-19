@@ -63,7 +63,14 @@ func (o *DeviceCodeCredentialOptions) init() {
 
 // DeviceCodeMessage is used to store device code related information to help the user login and allow the device code flow to continue
 // to request a token to authenticate a user.
-type DeviceCodeMessage = public.DeviceCodeResult
+type DeviceCodeMessage struct {
+	// User code returned by the service.
+	UserCode string `json:"user_code"`
+	// Verification URL where the user must navigate to authenticate using the device code and credentials.
+	VerificationURL string `json:"verification_uri"`
+	// User friendly text response that can be used for display purposes.
+	Message string `json:"message"`
+}
 
 // DeviceCodeCredential authenticates a user using the device code flow, and provides access tokens for that user account.
 // For more information on the device code authentication flow see: https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-device-code.
@@ -109,7 +116,11 @@ func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts azcore.TokenRe
 		addGetTokenFailureLogs("Device Code Credential", err, true)
 		return nil, newAuthenticationFailedError(err)
 	}
-	c.userPrompt(dc.Result)
+	c.userPrompt(DeviceCodeMessage{
+		UserCode:        dc.Result.UserCode,
+		VerificationURL: dc.Result.VerificationURL,
+		Message:         dc.Result.Message,
+	})
 	tk, err := dc.AuthenticationResult(ctx)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)

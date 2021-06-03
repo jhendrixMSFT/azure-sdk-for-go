@@ -4,6 +4,7 @@
 package azidentity
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -40,6 +41,10 @@ func newBearerTokenPolicy(creds azcore.TokenCredential, opts azcore.Authenticati
 		creds:   creds,
 		options: opts.Options,
 	}
+}
+
+type multitenantCredential interface {
+	GetAuxiliaryTokens(context.Context, azcore.TokenRequestOptions) ([]azcore.AccessToken, error)
 }
 
 func (b *bearerTokenPolicy) Do(req *azcore.Request) (*azcore.Response, error) {
@@ -87,6 +92,10 @@ func (b *bearerTokenPolicy) Do(req *azcore.Request) (*azcore.Response, error) {
 	if getToken {
 		// this go routine has been elected to refresh the token
 		tk, err := b.creds.GetToken(req.Context(), b.options)
+		if mtCreds, ok := b.creds.(multitenantCredential); ok {
+			auxTks, err := mtCreds.GetAuxiliaryTokens(req.Context(), b.options)
+			// do stuff with auxTks, err....
+		}
 		// update shared state
 		b.cond.L.Lock()
 		// to avoid a deadlock if GetToken() fails we MUST reset b.renewing to false before returning

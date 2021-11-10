@@ -12,14 +12,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm"
+	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 )
 
 // VirtualHubBgpConnectionClient contains the methods for the VirtualHubBgpConnection group.
@@ -39,7 +40,7 @@ func NewVirtualHubBgpConnectionClient(subscriptionID string, credential azcore.T
 	if len(cp.Host) == 0 {
 		cp.Host = arm.AzurePublicCloud
 	}
-	return &VirtualHubBgpConnectionClient{subscriptionID: subscriptionID, ep: string(cp.Host), pl: armruntime.NewPipeline(module, version, credential, &cp)}
+	return &VirtualHubBgpConnectionClient{subscriptionID: subscriptionID, ep: string(cp.Host), pl: armruntime.NewPipeline(module, version, credential, runtime.PipelineOptions{}, &cp)}
 }
 
 // BeginCreateOrUpdate - Creates a VirtualHubBgpConnection resource if it doesn't exist else updates the existing VirtualHubBgpConnection.

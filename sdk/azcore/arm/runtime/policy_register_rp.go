@@ -16,12 +16,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	armpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
-	azpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	armpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
+	azpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 

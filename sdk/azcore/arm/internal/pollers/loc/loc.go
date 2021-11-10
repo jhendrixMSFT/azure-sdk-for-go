@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"net/http"
 
-	armpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/internal/pollers"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	armpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 

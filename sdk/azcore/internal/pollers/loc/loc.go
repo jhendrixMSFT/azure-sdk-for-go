@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 

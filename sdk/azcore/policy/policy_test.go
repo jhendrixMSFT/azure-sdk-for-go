@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 )
 
 func TestWithHTTPHeader(t *testing.T) {

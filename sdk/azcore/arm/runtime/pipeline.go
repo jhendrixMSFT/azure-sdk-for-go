@@ -7,12 +7,12 @@
 package runtime
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm"
+	armpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 )
 
 // NewPipeline creates a pipeline from connection options.

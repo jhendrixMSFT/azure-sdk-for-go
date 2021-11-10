@@ -6,7 +6,7 @@
 
 package arm
 
-import "github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+import "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
 
 // Endpoint is the base URL for Azure Resource Manager.
 type Endpoint string

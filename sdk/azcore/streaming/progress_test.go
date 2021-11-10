@@ -15,8 +15,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 )
 

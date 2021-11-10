@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 )
 

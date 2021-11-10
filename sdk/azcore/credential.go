@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
 )
 
 // TokenCredential represents a credential capable of providing an OAuth token.

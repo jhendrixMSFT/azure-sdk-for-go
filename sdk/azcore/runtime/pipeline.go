@@ -7,8 +7,8 @@
 package runtime
 
 import (
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
 )
 
 // PipelineOptions contains Pipeline options for SDK developers

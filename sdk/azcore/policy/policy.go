@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 )
 
 // Policy represents an extensibility point for the Pipeline that can mutate the specified

@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/log"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 )
 

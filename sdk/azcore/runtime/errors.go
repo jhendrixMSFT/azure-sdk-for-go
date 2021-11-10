@@ -9,7 +9,7 @@ package runtime
 import (
 	"net/http"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 )
 
 // NewResponseError wraps the specified error with an error that provides access to an HTTP response.

@@ -9,7 +9,7 @@ package pollers
 import (
 	"net/http"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 )
 
 // provisioningState returns the provisioning state from the response or the empty string.

@@ -9,7 +9,7 @@ package azcore
 import (
 	"net/http"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
 )
 

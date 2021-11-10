@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/streaming"
 )
 
 const (
@@ -112,7 +112,7 @@ func setRetryOptionDefaults(o *policy.RetryOptions) {
 func newDefaultMSIPipeline(o ManagedIdentityCredentialOptions) runtime.Pipeline {
 	cp := o.ClientOptions
 	setRetryOptionDefaults(&cp.Retry)
-	return runtime.NewPipeline(component, version, nil, nil, &cp)
+	return runtime.NewPipeline(component, version, runtime.PipelineOptions{}, &cp)
 }
 
 // newManagedIdentityClient creates a new instance of the ManagedIdentityClient with the ManagedIdentityCredentialOptions

@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 )
 

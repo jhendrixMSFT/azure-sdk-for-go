@@ -197,7 +197,7 @@ Azure Active Directory
 
 This module uses the classification-based logging implementation in `azcore`. To enable console logging for all SDK modules, set `AZURE_SDK_GO_LOGGING` to `all`. Use the `azcore/log` package to control log event output or to enable logs for `azidentity` only. For example:
 ```go
-import azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
+import azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/log"
 
 // print log output to stdout
 azlog.SetListener(func(event azlog.Event, s string) {

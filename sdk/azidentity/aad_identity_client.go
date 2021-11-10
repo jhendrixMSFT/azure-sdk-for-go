@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/streaming"
 )
 
 const (
@@ -58,7 +58,7 @@ type aadIdentityClient struct {
 // newAADIdentityClient creates a new instance of the aadIdentityClient
 func newAADIdentityClient(authorityHost string, options *azcore.ClientOptions) (*aadIdentityClient, error) {
 	logEnvVars()
-	pl := runtime.NewPipeline(component, version, nil, nil, options)
+	pl := runtime.NewPipeline(component, version, runtime.PipelineOptions{}, options)
 	return &aadIdentityClient{authorityHost: authorityHost, pipeline: pl}, nil
 }
 

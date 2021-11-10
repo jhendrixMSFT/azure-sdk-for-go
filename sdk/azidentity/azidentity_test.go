@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2/runtime"
 )
 
 // constants used throughout this package
@@ -56,7 +56,7 @@ func defaultTestPipeline(srv policy.Transporter, cred azcore.TokenCredential, sc
 		RetryDelay:    50 * time.Millisecond,
 	}
 	b := runtime.NewBearerTokenPolicy(cred, []string{scope}, nil)
-	return runtime.NewPipeline("azidentity-test", version, nil, []policy.Policy{b}, &azcore.ClientOptions{Retry: retryOpts, Transport: srv})
+	return runtime.NewPipeline("azidentity-test", version, runtime.PipelineOptions{PerRetry: []policy.Policy{b}}, &azcore.ClientOptions{Retry: retryOpts, Transport: srv})
 }
 
 // constants for this file

@@ -11,7 +11,7 @@ import (
 	"path"
 	"regexp"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/v2"
 )
 
 const azureAuthorityHost = "AZURE_AUTHORITY_HOST"

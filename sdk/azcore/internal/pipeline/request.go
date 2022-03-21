@@ -161,3 +161,14 @@ func (req *Request) Clone(ctx context.Context) *Request {
 	r2.req = req.req.Clone(ctx)
 	return &r2
 }
+
+// WithContext returns a shallow copy of req with its context changed
+// to ctx. The provided ctx must be non-nil.
+func (req *Request) WithContext(ctx context.Context) *Request {
+	return &Request{
+		req:      req.req.WithContext(ctx),
+		body:     req.body,
+		policies: req.policies,
+		values:   req.values,
+	}
+}

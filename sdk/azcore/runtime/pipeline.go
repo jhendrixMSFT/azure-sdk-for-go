@@ -8,6 +8,7 @@ package runtime
 
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 )
 
@@ -22,6 +23,7 @@ type PipelineOptions struct {
 // perCall: additional policies to invoke once per request
 // perRetry: additional policies to invoke once per request and once per retry of that request
 func NewPipeline(module, version string, plOpts PipelineOptions, options *policy.ClientOptions) Pipeline {
+	tracing.Init()
 	cp := policy.ClientOptions{}
 	if options != nil {
 		cp = *options

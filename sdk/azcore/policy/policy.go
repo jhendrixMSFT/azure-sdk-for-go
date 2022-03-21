@@ -7,6 +7,9 @@
 package policy
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
@@ -92,6 +95,16 @@ type RetryOptions struct {
 	// The default value is the status codes in StatusCodesForRetry.
 	// Specifying an empty slice will cause retries to happen only for transport errors.
 	StatusCodes []int
+}
+
+// String implements the fmt.Stringer interface for type RetryOptions.
+func (r RetryOptions) String() string {
+	sc := make([]string, len(r.StatusCodes))
+	for i := range r.StatusCodes {
+		sc[i] = strconv.Itoa(r.StatusCodes[i])
+	}
+	return fmt.Sprintf("Max retries: %d\nTry timeout: %s\nRetry delay: %s\nMax retry delay: %s\nStatus codes: [%s]",
+		r.MaxRetries, r.TryTimeout, r.RetryDelay, r.MaxRetryDelay, strings.Join(sc, ","))
 }
 
 // TelemetryOptions configures the telemetry policy's behavior.

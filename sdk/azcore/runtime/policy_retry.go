@@ -9,6 +9,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/rand"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
@@ -84,12 +86,20 @@ type retryPolicy struct {
 }
 
 func (p *retryPolicy) Do(req *policy.Request) (resp *http.Response, err error) {
+	ctx, span := tracing.Tracer.Start(req.Raw().Context(), "azcore.retryPolicy.Do", nil)
+	status := tracing.StatusCodeNone
+	errorDesc := ""
+	defer span.End(status, errorDesc)
+
+	req = req.WithContext(ctx)
+
 	options := p.options
 	// check if the retry options have been overridden for this call
 	if override := req.Raw().Context().Value(shared.CtxWithRetryOptionsKey{}); override != nil {
 		options = override.(policy.RetryOptions)
 	}
 	setDefaults(&options)
+	span.RecordEvent("retry options", tracing.WithKeyValuePair("retry options", options.String()))
 	// Exponential retry algorithm: ((2 ^ attempt) - 1) * delay * random(0.8, 1.2)
 	// When to retry: connection failure or temporary/timeout.
 	var rwbody *retryableRequestBody
@@ -103,12 +113,20 @@ func (p *retryPolicy) Do(req *policy.Request) (resp *http.Response, err error) {
 	for {
 		resp = nil // reset
 		log.Writef(log.EventRetryPolicy, "\n=====> Try=%d %s %s", try, req.Raw().Method, req.Raw().URL.String())
+		span.RecordEvent(fmt.Sprintf("Begin try number %d", try),
+			tracing.WithKeyValuePair("method", req.Raw().Method),
+			tracing.WithKeyValuePair("URL", req.Raw().URL.String()),
+		)
 
 		// For each try, seek to the beginning of the Body stream. We do this even for the 1st try because
 		// the stream may not be at offset 0 when we first get it and we want the same behavior for the
 		// 1st try as for additional tries.
 		err = req.RewindBody()
 		if err != nil {
+			span.RecordError(err)
+			//span.SetStatus(tracing.StatusCodeError, "failed to rewind body")
+			status = tracing.StatusCodeError
+			errorDesc = "failed to rewind body"
 			return
 		}
 		// RewindBody() restores Raw().Body to its original state, so set our rewindable after
@@ -126,17 +144,24 @@ func (p *retryPolicy) Do(req *policy.Request) (resp *http.Response, err error) {
 			tryCancel()
 		}
 		if err == nil {
+			span.RecordEvent(fmt.Sprintf("response %d", resp.StatusCode))
 			log.Writef(log.EventRetryPolicy, "response %d", resp.StatusCode)
 		} else {
+			span.RecordError(err)
+			//span.SetStatus(tracing.StatusCodeError, "response error")
+			status = tracing.StatusCodeError
+			errorDesc = "response error"
 			log.Writef(log.EventRetryPolicy, "error %v", err)
 		}
 
 		if err == nil && !HasStatusCode(resp, options.StatusCodes...) {
 			// if there is no error and the response code isn't in the list of retry codes then we're done.
+			span.RecordEvent(fmt.Sprintf("End try number %d", try))
 			return
 		} else if ctxErr := req.Raw().Context().Err(); ctxErr != nil {
 			// don't retry if the parent context has been cancelled or its deadline exceeded
 			err = ctxErr
+			span.RecordEvent(fmt.Sprintf("abort due to %v", ctxErr))
 			log.Writef(log.EventRetryPolicy, "abort due to %v", err)
 			return
 		}
@@ -145,12 +170,14 @@ func (p *retryPolicy) Do(req *policy.Request) (resp *http.Response, err error) {
 		var nre errorinfo.NonRetriable
 		if errors.As(err, &nre) {
 			// the error says it's not retriable so don't retry
+			span.RecordEvent(fmt.Sprintf("non-retriable error %T", nre))
 			log.Writef(log.EventRetryPolicy, "non-retriable error %T", nre)
 			return
 		}
 
 		if try == options.MaxRetries+1 {
 			// max number of tries has been reached, don't sleep again
+			span.RecordEvent(fmt.Sprintf("MaxRetries %d exceeded", options.MaxRetries))
 			log.Writef(log.EventRetryPolicy, "MaxRetries %d exceeded", options.MaxRetries)
 			return
 		}
@@ -163,12 +190,14 @@ func (p *retryPolicy) Do(req *policy.Request) (resp *http.Response, err error) {
 		if delay <= 0 {
 			delay = calcDelay(options, try)
 		}
+		span.RecordEvent(fmt.Sprintf("End try number %d", try), tracing.WithKeyValuePair("delay", delay.String()))
 		log.Writef(log.EventRetryPolicy, "End Try #%d, Delay=%v", try, delay)
 		select {
 		case <-time.After(delay):
 			try++
 		case <-req.Raw().Context().Done():
 			err = req.Raw().Context().Err()
+			span.RecordEvent(fmt.Sprintf("abort due to %v", err))
 			log.Writef(log.EventRetryPolicy, "abort due to %v", err)
 			return
 		}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 
@@ -171,14 +172,26 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 	if freq < time.Second {
 		return nil, errors.New("polling frequency minimum is one second")
 	}
+
+	ctx, span := tracing.Tracer.Start(ctx, "azcore.Poller.PollUntilDone", nil)
+	status := tracing.StatusCodeNone
+	errorDesc := ""
+	defer func() {
+		span.End(status, errorDesc)
+	}()
+
 	start := time.Now()
 	logPollUntilDoneExit := func(v interface{}) {
+		span.RecordEvent("END PollUntilDone()",
+			tracing.WithKeyValuePair("total time", time.Since(start).String()))
 		log.Writef(log.EventLRO, "END PollUntilDone() for %T: %v, total time: %s", l.lro, v, time.Since(start))
 	}
+	span.RecordEvent("BEGIN PollUntilDone()")
 	log.Writef(log.EventLRO, "BEGIN PollUntilDone() for %T", l.lro)
 	if l.resp != nil {
 		// initial check for a retry-after header existing on the initial response
 		if retryAfter := shared.RetryAfter(l.resp); retryAfter > 0 {
+			span.RecordEvent(fmt.Sprintf("Initial Retry-After delay %s", retryAfter))
 			log.Writef(log.EventLRO, "initial Retry-After delay for %s", retryAfter.String())
 			if err := shared.Delay(ctx, retryAfter); err != nil {
 				logPollUntilDoneExit(err)
@@ -190,6 +203,10 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 	for {
 		resp, err := l.Poll(ctx)
 		if err != nil {
+			span.RecordError(err)
+			//span.SetStatus(tracing.StatusCodeError, "LRO returned an error")
+			errorDesc = "LRO returned an error"
+			status = tracing.StatusCodeError
 			logPollUntilDoneExit(err)
 			return nil, err
 		}
@@ -200,8 +217,10 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 		d := freq
 		if retryAfter := shared.RetryAfter(resp); retryAfter > 0 {
 			log.Writef(log.EventLRO, "Retry-After delay for %s", retryAfter.String())
+			span.RecordEvent(fmt.Sprintf("Retry-After delay %s", retryAfter))
 			d = retryAfter
 		} else {
+			span.RecordEvent(fmt.Sprintf("delay for %s", d.String()))
 			log.Writef(log.EventLRO, "delay for %s", d.String())
 		}
 		if err = shared.Delay(ctx, d); err != nil {

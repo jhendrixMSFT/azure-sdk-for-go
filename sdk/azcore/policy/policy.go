@@ -14,6 +14,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 )
 
 // Policy represents an extensibility point for the Pipeline that can mutate the specified
@@ -49,6 +50,10 @@ type ClientOptions struct {
 	// PerRetryPolicies contains custom policies to inject into the pipeline.
 	// Each policy is executed once per request, and for each retry of that request.
 	PerRetryPolicies []Policy
+
+	// TraceProvider configures the tracing provider.
+	// It defaults to a no-op tracer.
+	TraceProvider tracing.Provider
 }
 
 // LogOptions configures the logging policy's behavior.

@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/loc"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/op"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 
@@ -45,7 +46,7 @@ func NewPoller[T any](pollerID string, resp *http.Response, pl pipeline.Pipeline
 		return nil, err
 	}
 	return &Poller[T]{
-		pt: pollers.NewPoller(lro, resp, pl),
+		pt: pollers.NewPoller(tracing.Tracer{}, lro, resp, pl),
 		rt: rt,
 	}, nil
 }
@@ -73,7 +74,7 @@ func NewPollerFromResumeToken[T any](pollerID string, token string, pl pipeline.
 		return nil, err
 	}
 	return &Poller[T]{
-		pt: pollers.NewPoller(lro, nil, pl),
+		pt: pollers.NewPoller(tracing.Tracer{}, lro, nil, pl),
 		rt: rt,
 	}, nil
 }

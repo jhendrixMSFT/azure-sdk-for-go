@@ -17,7 +17,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/tracing"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 
@@ -55,16 +55,17 @@ func PollerType(p *Poller) reflect.Type {
 }
 
 // NewPoller creates a Poller from the specified input.
-func NewPoller(lro Operation, resp *http.Response, pl pipeline.Pipeline) *Poller {
-	return &Poller{lro: lro, pl: pl, resp: resp}
+func NewPoller(tracer tracing.Tracer, lro Operation, resp *http.Response, pl pipeline.Pipeline) *Poller {
+	return &Poller{tracer: tracer, lro: lro, pl: pl, resp: resp}
 }
 
 // Poller encapsulates state and logic for polling on long-running operations.
 type Poller struct {
-	lro  Operation
-	pl   pipeline.Pipeline
-	resp *http.Response
-	err  error
+	tracer tracing.Tracer
+	lro    Operation
+	pl     pipeline.Pipeline
+	resp   *http.Response
+	err    error
 }
 
 // Done returns true if the LRO has reached a terminal state.
@@ -131,19 +132,35 @@ func (l *Poller) FinalResponse(ctx context.Context, respType interface{}) (*http
 	if !l.Done() {
 		return nil, errors.New("cannot return a final response from a poller in a non-terminal state")
 	}
+
+	ctx, span := l.tracer.Start(ctx, "azcore.Poller.FinalResponse", nil)
+	status := tracing.StatusCodeNone
+	var err error
+	errorDesc := ""
+	defer func() {
+		span.End(status, err, errorDesc)
+	}()
+
 	// update l.resp with the content from final GET if applicable
 	if u := l.lro.FinalGetURL(); u != "" {
 		log.Write(log.EventLRO, "Performing final GET.")
 		req, err := pipeline.NewRequest(ctx, http.MethodGet, u)
 		if err != nil {
+			status = tracing.StatusCodeError
+			errorDesc = "failed to create request"
 			return nil, err
 		}
 		resp, err := l.pl.Do(req)
 		if err != nil {
+			errorDesc = "operation returned an error"
+			status = tracing.StatusCodeError
 			return nil, err
 		}
 		if !StatusCodeValid(resp) {
-			return nil, shared.NewResponseError(resp)
+			errorDesc = "operation returned an error"
+			status = tracing.StatusCodeError
+			err = shared.NewResponseError(resp)
+			return nil, err
 		}
 		l.resp = resp
 	}
@@ -156,9 +173,13 @@ func (l *Poller) FinalResponse(ctx context.Context, respType interface{}) (*http
 	}
 	body, err := shared.Payload(l.resp)
 	if err != nil {
+		errorDesc = "failed to retrieve payload"
+		status = tracing.StatusCodeError
 		return nil, err
 	}
 	if err = json.Unmarshal(body, respType); err != nil {
+		errorDesc = "failed to unmarshal payload"
+		status = tracing.StatusCodeError
 		return nil, err
 	}
 	return l.resp, nil
@@ -173,25 +194,22 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 		return nil, errors.New("polling frequency minimum is one second")
 	}
 
-	ctx, span := tracing.Tracer.Start(ctx, "azcore.Poller.PollUntilDone", nil)
+	ctx, span := l.tracer.Start(ctx, "azcore.Poller.PollUntilDone", nil)
 	status := tracing.StatusCodeNone
+	var err error
 	errorDesc := ""
 	defer func() {
-		span.End(status, errorDesc)
+		span.End(status, err, errorDesc)
 	}()
 
 	start := time.Now()
 	logPollUntilDoneExit := func(v interface{}) {
-		span.RecordEvent("END PollUntilDone()",
-			tracing.WithKeyValuePair("total time", time.Since(start).String()))
 		log.Writef(log.EventLRO, "END PollUntilDone() for %T: %v, total time: %s", l.lro, v, time.Since(start))
 	}
-	span.RecordEvent("BEGIN PollUntilDone()")
 	log.Writef(log.EventLRO, "BEGIN PollUntilDone() for %T", l.lro)
 	if l.resp != nil {
 		// initial check for a retry-after header existing on the initial response
 		if retryAfter := shared.RetryAfter(l.resp); retryAfter > 0 {
-			span.RecordEvent(fmt.Sprintf("Initial Retry-After delay %s", retryAfter))
 			log.Writef(log.EventLRO, "initial Retry-After delay for %s", retryAfter.String())
 			if err := shared.Delay(ctx, retryAfter); err != nil {
 				logPollUntilDoneExit(err)
@@ -201,11 +219,10 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 	}
 	// begin polling the endpoint until a terminal state is reached
 	for {
-		resp, err := l.Poll(ctx)
+		var resp *http.Response
+		resp, err = l.Poll(ctx)
 		if err != nil {
-			span.RecordError(err)
-			//span.SetStatus(tracing.StatusCodeError, "LRO returned an error")
-			errorDesc = "LRO returned an error"
+			errorDesc = "operation returned an error"
 			status = tracing.StatusCodeError
 			logPollUntilDoneExit(err)
 			return nil, err
@@ -217,13 +234,13 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 		d := freq
 		if retryAfter := shared.RetryAfter(resp); retryAfter > 0 {
 			log.Writef(log.EventLRO, "Retry-After delay for %s", retryAfter.String())
-			span.RecordEvent(fmt.Sprintf("Retry-After delay %s", retryAfter))
 			d = retryAfter
 		} else {
-			span.RecordEvent(fmt.Sprintf("delay for %s", d.String()))
 			log.Writef(log.EventLRO, "delay for %s", d.String())
 		}
 		if err = shared.Delay(ctx, d); err != nil {
+			errorDesc = "operation was cancelled or timed out"
+			status = tracing.StatusCodeError
 			logPollUntilDoneExit(err)
 			return nil, err
 		}

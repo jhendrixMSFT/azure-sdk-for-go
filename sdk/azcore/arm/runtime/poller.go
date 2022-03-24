@@ -19,12 +19,13 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/internal/pollers/loc"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pipeline"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/tracing"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 
 // NewPoller creates a Poller based on the provided initial response.
 // pollerID - a unique identifier for an LRO.  it's usually the client.Method string.
-func NewPoller[T any](pollerID string, finalState string, resp *http.Response, pl pipeline.Pipeline, rt *T) (*Poller[T], error) {
+func NewPoller[T any](tracer tracing.Tracer, pollerID string, finalState string, resp *http.Response, pl pipeline.Pipeline, rt *T) (*Poller[T], error) {
 	defer resp.Body.Close()
 	// this is a back-stop in case the swagger is incorrect (i.e. missing one or more status codes for success).
 	// ideally the codegen should return an error if the initial response failed and not even create a poller.
@@ -53,14 +54,14 @@ func NewPoller[T any](pollerID string, finalState string, resp *http.Response, p
 		return nil, err
 	}
 	return &Poller[T]{
-		pt: pollers.NewPoller(lro, resp, pl),
+		pt: pollers.NewPoller(tracer, lro, resp, pl),
 		rt: rt,
 	}, nil
 }
 
 // NewPollerFromResumeToken creates a Poller from a resume token string.
 // pollerID - a unique identifier for an LRO.  it's usually the client.Method string.
-func NewPollerFromResumeToken[T any](pollerID string, token string, pl pipeline.Pipeline, rt *T) (*Poller[T], error) {
+func NewPollerFromResumeToken[T any](tracer tracing.Tracer, pollerID string, token string, pl pipeline.Pipeline, rt *T) (*Poller[T], error) {
 	kind, err := pollers.KindFromToken(pollerID, token)
 	if err != nil {
 		return nil, err
@@ -84,7 +85,7 @@ func NewPollerFromResumeToken[T any](pollerID string, token string, pl pipeline.
 		return nil, err
 	}
 	return &Poller[T]{
-		pt: pollers.NewPoller(lro, nil, pl),
+		pt: pollers.NewPoller(tracer, lro, nil, pl),
 		rt: rt,
 	}, nil
 }

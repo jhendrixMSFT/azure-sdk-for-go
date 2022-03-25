@@ -194,7 +194,9 @@ func (l *Poller) PollUntilDone(ctx context.Context, freq time.Duration, respType
 		return nil, errors.New("polling frequency minimum is one second")
 	}
 
-	ctx, span := l.tracer.Start(ctx, "azcore.Poller.PollUntilDone", nil)
+	ctx, span := l.tracer.Start(ctx, "azcore.Poller.PollUntilDone", &tracing.SpanOptions{
+		Kind: tracing.SpanKindInternal,
+	})
 	status := tracing.StatusCodeNone
 	var err error
 	errorDesc := ""

@@ -28,7 +28,14 @@ type tracingPolicy struct {
 
 func (t *tracingPolicy) Do(req *policy.Request) (*http.Response, error) {
 	// TODO: clean up name, include try number
-	ctx, span := t.tracer.Start(req.Raw().Context(), "azcore.tracingPolicy.Do", nil)
+	ctx, span := t.tracer.Start(req.Raw().Context(), "azcore.tracingPolicy.Do", &tracing.SpanOptions{
+		Kind: tracing.SpanKindClient,
+		Attributes: []tracing.KeyValuePair{
+			tracing.NewKeyValuePair("http.method", http.MethodDelete),
+			tracing.NewKeyValuePair("http.url", req.Raw().URL.String()),
+			tracing.NewKeyValuePair("http.user_agent", req.Raw().UserAgent()),
+		},
+	})
 	req = req.WithContext(ctx)
 
 	status := tracing.StatusCodeNone
@@ -38,11 +45,22 @@ func (t *tracingPolicy) Do(req *policy.Request) (*http.Response, error) {
 		span.End(status, err, errDesc)
 	}()
 
+	if reqID := req.Raw().Header.Get("x-ms-client-request-id"); reqID != "" {
+		span.SetAttributes(tracing.NewKeyValuePair("requestId", reqID))
+	}
+
 	var resp *http.Response
 	resp, err = req.Next()
 	if err != nil {
 		status = tracing.StatusCodeError
 		errDesc = "the operation failed"
+	}
+	if resp != nil {
+		span.SetAttributes(tracing.NewKeyValuePair("http.status_code", resp.StatusCode))
+
+		if reqID := resp.Header.Get("x-ms-request-id"); reqID != "" {
+			span.SetAttributes(tracing.NewKeyValuePair("serviceRequestId", reqID))
+		}
 	}
 	return resp, err
 }

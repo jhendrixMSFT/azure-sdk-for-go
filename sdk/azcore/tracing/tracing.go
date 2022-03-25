@@ -84,8 +84,11 @@ var _ TracerStarter = (*Tracer)(nil)
 // SpanImpl contains the underlying implementation for Span.
 // Any zero-values will have their default, no-op behavior.
 type SpanImpl struct {
-	// Ender is the implementation for the End method.
-	Ender SpanEnder
+	// End is the implementation for the End method.
+	End func(code StatusCode, err error, errDesc string)
+
+	// SetAttributes is the implementation for the SetAttributes method.
+	SetAttributes func(...KeyValuePair)
 }
 
 // NewSpan returns a Span with the specified implementation.
@@ -104,20 +107,24 @@ type Span struct {
 // End terminates the span and MUST be called before the span leaves scope.
 // Any further updates to the span will be ignored after End is called.
 func (s Span) End(code StatusCode, err error, errDesc string) {
-	if s.impl.Ender != nil {
-		s.impl.Ender.End(code, err, errDesc)
+	if s.impl.End != nil {
+		s.impl.End(code, err, errDesc)
 	}
 }
 
-var _ SpanEnder = (*Span)(nil)
-
-// SpanEnder abstracts the End method for a Span.
-type SpanEnder interface {
-	End(code StatusCode, err error, errDesc string)
+// SetAttributes sets the specified attributes on the Span.
+// Any existing attributes with the same keys will have their values overwritten.
+func (s Span) SetAttributes(attrs ...KeyValuePair) {
+	if s.impl.SetAttributes != nil {
+		s.impl.SetAttributes(attrs...)
+	}
 }
 
 // SpanOptions contains optional settings for creating a span.
 type SpanOptions struct {
+	// Kind indicates the kind of Span.
+	Kind SpanKind
+
 	// Attributes contains key-value pairs of attributes for the span.
 	Attributes []KeyValuePair
 }
@@ -153,6 +160,26 @@ func (k KeyValuePair) Key() string {
 func (k KeyValuePair) Value() interface{} {
 	return k.v
 }
+
+// SpanKind represents the role of a Span inside a Trace. Often, this defines how a Span will be processed and visualized by various backends.
+type SpanKind string
+
+const (
+	// SpanKindInternal indicates the span represents an interal operation within an application.  This is the default value.
+	SpanKindInternal SpanKind = "internal"
+
+	// SpanKindServer indicates the span covers server-side handling of a request.
+	SpanKindServer SpanKind = "server"
+
+	// SpanKindClient indicates the span describes a request to a remote service.
+	SpanKindClient SpanKind = "client"
+
+	// SpanKindProducer indicates the span was created by a messaging producer.
+	SpanKindProducer SpanKind = "producer"
+
+	// SpanKindConsumer indicates the span was created by a messaging consumer.
+	SpanKindConsumer SpanKind = "consumer"
+)
 
 // StatusCode indicates the state of the trace.
 type StatusCode uint32

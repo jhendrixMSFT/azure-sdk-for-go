@@ -36,6 +36,7 @@ type RegistrationOptions struct {
 
 	// PollingDuration is the amount of time to wait before abandoning polling.
 	// The default valule is 5 minutes.
+	// A value less than zero means do not wait for the terminal registration state.
 	// NOTE: Setting this to a small value might cause the policy to prematurely fail.
 	PollingDuration time.Duration
 }

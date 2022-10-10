@@ -3,6 +3,8 @@
 ## 1.1.5 (Unreleased)
 
 ### Features Added
+* Setting `arm/policy/RegistrationOptions.PollingDuration` to a value less than zero will prevent polling on the RP's registration state.
+* When the auto-RP registration policy exits, it will return an `*arm/runtime/RPRegistrationError` if the RP's registration state is non-terminal.
 
 ### Breaking Changes
 

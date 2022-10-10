@@ -22,6 +22,7 @@ import (
 	azpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
+	"github.com/stretchr/testify/require"
 )
 
 const rpUnregisteredResp = `{
@@ -213,8 +214,9 @@ func TestRPRegistrationPolicyTimesOut(t *testing.T) {
 		logEntries++
 	})
 	resp, err := pl.Do(req)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected DeadlineExceeded, got %v", err)
+	var regErr *RPRegistrationError
+	if !errors.As(err, &regErr) {
+		t.Fatalf("expected RPRegistrationError, got %v", err)
 	}
 	// should be three entries
 	// 1st is for start
@@ -440,4 +442,40 @@ func TestRPRegistrationPolicyWithIncompleteCloudConfig(t *testing.T) {
 			t.Fatal("expected an error")
 		}
 	}
+}
+
+func TestRPRegistrationPolicyNoPolling(t *testing.T) {
+	srv, close := mock.NewServer()
+	defer close()
+	// initial response that RP is unregistered
+	srv.AppendResponse(mock.WithStatusCode(http.StatusConflict), mock.WithBody([]byte(rpUnregisteredResp)))
+	// polling responses to Register() and Get(), in progress
+	srv.RepeatResponse(2, mock.WithStatusCode(http.StatusOK), mock.WithBody([]byte(rpRegisteringResp)))
+
+	ops := testRPRegistrationOptions(srv)
+	ops.MaxAttempts = 1
+	ops.PollingDuration = -1
+	rp, err := NewRPRegistrationPolicy(mockCredential{}, ops)
+	require.NoError(t, err)
+	pl := runtime.NewPipeline("test", "v0.1.0", runtime.PipelineOptions{PerCall: []azpolicy.Policy{rp}}, nil)
+
+	req, err := runtime.NewRequest(context.Background(), http.MethodGet, runtime.JoinPaths(srv.URL(), requestEndpoint))
+	require.NoError(t, err)
+	// log only RP registration
+	log.SetEvents(LogRPRegistration)
+	defer func() {
+		// reset logging
+		log.SetEvents()
+	}()
+	logEntries := 0
+	log.SetListener(func(cls log.Event, msg string) {
+		logEntries++
+	})
+	resp, err := pl.Do(req)
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.Equal(t, "Microsoft.Storage is in registration state Registering", err.Error())
+
+	// two entries for starting the registration and logging the exit
+	require.Equal(t, 2, logEntries)
 }

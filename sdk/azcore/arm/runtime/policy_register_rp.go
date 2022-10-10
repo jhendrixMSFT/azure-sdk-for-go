@@ -21,6 +21,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	azpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 )
 
@@ -46,6 +47,23 @@ func setDefaults(r *armpolicy.RegistrationOptions) {
 		r.PollingDuration = 5 * time.Minute
 	}
 }
+
+// RPRegistrationError is the error returned when the RP registration policy exits
+// and the RP's registration state is non-terminal.
+type RPRegistrationError struct {
+	rp    string
+	state string
+}
+
+// Error implements the error interface for type RPRegistrationError.
+func (e *RPRegistrationError) Error() string {
+	return fmt.Sprintf("%s is in registration state %s", e.rp, e.state)
+}
+
+// NonRetriable indicates this error shouldn't be retried.
+func (e *RPRegistrationError) NonRetriable() {}
+
+var _ errorinfo.NonRetriable = (*RPRegistrationError)(nil)
 
 // NewRPRegistrationPolicy creates a policy object configured using the specified options.
 // The policy controls whether an unregistered resource provider should automatically be
@@ -124,10 +142,23 @@ func (r *rpRegistrationPolicy) Do(req *azpolicy.Request) (*http.Response, error)
 			u:     r.endpoint,
 			subID: subID,
 		}
-		if _, err = rpOps.Register(req.Raw().Context(), rp); err != nil {
+		if registerResp, err := rpOps.Register(req.Raw().Context(), rp); err != nil {
 			logRegistrationExit(err)
 			return resp, err
+		} else if r.options.PollingDuration < 0 {
+			// polling for the terminal state has been disabled
+			state := "Unknown"
+			if registerResp.Provider.RegistrationState != nil {
+				state = *registerResp.Provider.RegistrationState
+			}
+			unregisteredErr := &RPRegistrationError{
+				rp:    rp,
+				state: state,
+			}
+			logRegistrationExit(unregisteredErr)
+			return nil, unregisteredErr
 		}
+
 		// RP was registered, however we need to wait for the registration to complete
 		pollCtx, pollCancel := context.WithTimeout(req.Raw().Context(), r.options.PollingDuration)
 		var lastRegState string
@@ -156,8 +187,12 @@ func (r *rpRegistrationPolicy) Do(req *azpolicy.Request) (*http.Response, error)
 				// continue polling
 			case <-pollCtx.Done():
 				pollCancel()
-				logRegistrationExit(pollCtx.Err())
-				return resp, pollCtx.Err()
+				unregisteredErr := &RPRegistrationError{
+					rp:    rp,
+					state: lastRegState,
+				}
+				logRegistrationExit(unregisteredErr)
+				return resp, unregisteredErr
 			}
 		}
 		// RP was successfully registered, retry the original request

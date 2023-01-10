@@ -8,7 +8,9 @@ package fake_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
@@ -35,15 +37,26 @@ var myFakeAvailabilitySetsServer = computefake.AvailabilitySetsServer{
 }
 
 func ExampleAvailabilitySetsServer_Get() {
+	fakeAvailabilitySetsServer := computefake.AvailabilitySetsServer{}
+
 	client, err := armcompute.NewAvailabilitySetsClient("subscriptionID", azfake.NewTokenCredential(), &arm.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
-			Transport: computefake.NewAvailabilitySetsServerTransport(&myFakeAvailabilitySetsServer),
+			Transport: computefake.NewAvailabilitySetsServerTransport(&fakeAvailabilitySetsServer),
 		},
 	})
 	if err != nil {
 		panic(err)
 	}
 
+	fakeAvailabilitySetsServer.Get = func(ctx context.Context, resourceGroupName string, availabilitySetName string, options *armcompute.AvailabilitySetsClientGetOptions) (resp azfake.Responder[armcompute.AvailabilitySetsClientGetResponse], err azfake.ErrorResponder) {
+		// create a custom AvailabilitySetsClientGetResponse
+		resp.Set(armcompute.AvailabilitySetsClientGetResponse{
+			AvailabilitySet: armcompute.AvailabilitySet{
+				ID: to.Ptr("this-should-be-a-resource-ID"),
+			},
+		})
+		return
+	}
 	resp, err := client.Get(context.TODO(), "resourceGroupName", "availabilitySetName", nil)
 	if err != nil {
 		panic(err)
@@ -53,4 +66,42 @@ func ExampleAvailabilitySetsServer_Get() {
 
 	// output:
 	// this-should-be-a-resource-ID
+}
+
+func ExampleAvailabilitySetsServer_CreateOrUpdate() {
+	fakeAvailabilitySetsServer := computefake.AvailabilitySetsServer{}
+
+	client, err := armcompute.NewAvailabilitySetsClient("subscriptionID", azfake.NewTokenCredential(), &arm.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			Transport: computefake.NewAvailabilitySetsServerTransport(&fakeAvailabilitySetsServer),
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fakeAvailabilitySetsServer.OnCreateOrUpdate(nil, "", "", armcompute.AvailabilitySet{}, nil).
+		Response(armcompute.AvailabilitySetsClientCreateOrUpdateResponse{
+			AvailabilitySet: armcompute.AvailabilitySet{
+				ID: to.Ptr("this-should-be-a-resource-ID"),
+			},
+		}).
+		ResponseError("ErrorBoom", http.StatusConflict)
+
+	resp, err := client.CreateOrUpdate(context.TODO(), "resourceGroupName", "availabilitySetName", armcompute.AvailabilitySet{}, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(*resp.ID)
+
+	fakeAvailabilitySetsServer.OnCreateOrUpdate(nil, "", "", armcompute.AvailabilitySet{}, nil).ResponseError("ErrorBadRequest", http.StatusBadRequest)
+
+	_, err = client.CreateOrUpdate(context.TODO(), "resourceGroupName", "availabilitySetName", armcompute.AvailabilitySet{}, nil)
+	var respError *azcore.ResponseError
+	if !errors.As(err, &respError) {
+		panic(err)
+	}
+
+	fmt.Println(respError.Error())
 }

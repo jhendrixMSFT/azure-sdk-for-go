@@ -36,6 +36,35 @@ type AvailabilitySetsServer struct {
 	Update                     func(ctx context.Context, resourceGroupName string, availabilitySetName string, parameters armcompute.AvailabilitySetUpdate, options *armcompute.AvailabilitySetsClientUpdateOptions) (resp azfake.Responder[armcompute.AvailabilitySetsClientUpdateResponse], err azfake.ErrorResponder)
 }
 
+func Val[T any](val T) Matcher[T] {
+	return Matcher[T]{v: &val}
+}
+
+func AnyVal[T any]() Matcher[T] {
+	return Matcher[T]{anything: true}
+}
+
+func Nil[T any]() Matcher[*T] {
+	return Matcher[*T]{nil: true}
+}
+
+type Matcher[T any] struct {
+	v        *T
+	anything bool
+	nil      bool
+}
+
+func (m Matcher[T]) Match(val T) bool {
+	if m.anything {
+		return true
+	} else if m.nil && m.v == nil {
+		return true
+	} else if m.v == nil {
+		return false
+	}
+	return reflect.DeepEqual(*m.v, val)
+}
+
 type Responder[T any] struct {
 	resps []any
 }
@@ -83,7 +112,7 @@ func (a availabilitySetsCreateOrUpdateParams) String() string {
 
 }
 
-func (a *AvailabilitySetsServer) OnCreateOrUpdate(ctx context.Context, resourceGroupName string, availabilitySetName string, parameters armcompute.AvailabilitySet, options *armcompute.AvailabilitySetsClientCreateOrUpdateOptions) (resp *Responder[armcompute.AvailabilitySetsClientCreateOrUpdateResponse]) {
+func (a *AvailabilitySetsServer) OnCreateOrUpdate(ctx Matcher[context.Context], resourceGroupName Matcher[string], availabilitySetName Matcher[string], parameters Matcher[armcompute.AvailabilitySet], options Matcher[*armcompute.AvailabilitySetsClientCreateOrUpdateOptions]) (resp *Responder[armcompute.AvailabilitySetsClientCreateOrUpdateResponse]) {
 
 	a.onCreateOrUpdate = append(a.onCreateOrUpdate, Requester[availabilitySetsCreateOrUpdateParams, armcompute.AvailabilitySetsClientCreateOrUpdateResponse]{})
 	/*a.onCreateOrUpdate = func(fnCtx context.Context, fnResourceGroupName string, fnAvailabilitySetName string, fnParameters armcompute.AvailabilitySet, fnOptions *armcompute.AvailabilitySetsClientCreateOrUpdateOptions) (azresp azfake.Responder[armcompute.AvailabilitySetsClientCreateOrUpdateResponse], err azfake.ErrorResponder) {

@@ -17,6 +17,7 @@ import (
 	azfake "github.com/Azure/azure-sdk-for-go/sdk/azcore/fake"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4/fake"
 	computefake "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4/fake"
 )
 
@@ -80,7 +81,7 @@ func ExampleAvailabilitySetsServer_CreateOrUpdate() {
 		panic(err)
 	}
 
-	fakeAvailabilitySetsServer.OnCreateOrUpdate(nil, "", "", armcompute.AvailabilitySet{}, nil).
+	fakeAvailabilitySetsServer.OnCreateOrUpdate(fake.AnyVal[context.Context](), fake.Val("foo"), fake.AnyVal[string](), fake.AnyVal[armcompute.AvailabilitySet](), fake.Nil[armcompute.AvailabilitySetsClientCreateOrUpdateOptions]()).
 		Response(armcompute.AvailabilitySetsClientCreateOrUpdateResponse{
 			AvailabilitySet: armcompute.AvailabilitySet{
 				ID: to.Ptr("this-should-be-a-resource-ID"),
@@ -103,5 +104,8 @@ func ExampleAvailabilitySetsServer_CreateOrUpdate() {
 		panic(err)
 	}
 
+	fakeAvailabilitySetsServer.CreateOrUpdate = func(ctx context.Context, resourceGroupName, availabilitySetName string, parameters armcompute.AvailabilitySet, options *armcompute.AvailabilitySetsClientCreateOrUpdateOptions) (resp azfake.Responder[armcompute.AvailabilitySetsClientCreateOrUpdateResponse], err azfake.ErrorResponder) {
+
+	}
 	fmt.Println(respError.Error())
 }

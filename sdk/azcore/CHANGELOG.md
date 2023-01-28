@@ -19,6 +19,7 @@
 ### Bugs Fixed
 * Retry policy always clones the underlying `*http.Request` before invoking the next policy.
 * Added some non-standard error codes to the list of error codes for unregistered resource providers.
+* Fixed an issue polling on `Azure-AsyncOperation` LRO endpoints that could cause an unnecessary final GET which fails.
 
 ## 1.6.0 (2023-05-04)
 

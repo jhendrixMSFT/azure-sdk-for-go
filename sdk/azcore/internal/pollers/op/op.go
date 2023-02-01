@@ -14,8 +14,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/log"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	azpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/pollers"
 )
 
 // Applicable returns true if the LRO is using Operation-Location.
@@ -34,17 +35,17 @@ type Poller[T any] struct {
 	pl   exported.Pipeline
 	resp *http.Response
 
-	OpLocURL   string                `json:"oplocURL"`
-	LocURL     string                `json:"locURL"`
-	OrigURL    string                `json:"origURL"`
-	Method     string                `json:"method"`
-	FinalState pollers.FinalStateVia `json:"finalState"`
-	CurState   string                `json:"state"`
+	OpLocURL   string                  `json:"oplocURL"`
+	LocURL     string                  `json:"locURL"`
+	OrigURL    string                  `json:"origURL"`
+	Method     string                  `json:"method"`
+	FinalState azpollers.FinalStateVia `json:"finalState"`
+	CurState   string                  `json:"state"`
 }
 
 // New creates a new Poller from the provided initial response.
 // Pass nil for response to create an empty Poller for rehydration.
-func New[T any](pl exported.Pipeline, resp *http.Response, finalState pollers.FinalStateVia) (*Poller[T], error) {
+func New[T any](pl exported.Pipeline, resp *http.Response, finalState azpollers.FinalStateVia) (*Poller[T], error) {
 	if resp == nil {
 		log.Write(log.EventLRO, "Resuming Operation-Location poller.")
 		return &Poller[T]{pl: pl}, nil
@@ -90,7 +91,7 @@ func (p *Poller[T]) Done() bool {
 }
 
 func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
-	err := pollers.PollHelper(ctx, p.OpLocURL, p.pl, func(resp *http.Response) (string, error) {
+	err := azpollers.PollHelper(ctx, p.OpLocURL, p.pl, func(resp *http.Response) (string, error) {
 		if !pollers.StatusCodeValid(resp) {
 			p.resp = resp
 			return "", exported.NewResponseError(resp)
@@ -114,9 +115,9 @@ func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
 func (p *Poller[T]) Result(ctx context.Context, out *T) error {
 	var req *exported.Request
 	var err error
-	if p.FinalState == pollers.FinalStateViaLocation && p.LocURL != "" {
+	if p.FinalState == azpollers.FinalStateViaLocation && p.LocURL != "" {
 		req, err = exported.NewRequest(ctx, http.MethodGet, p.LocURL)
-	} else if p.FinalState == pollers.FinalStateViaOpLocation && p.Method == http.MethodPost {
+	} else if p.FinalState == azpollers.FinalStateViaOpLocation && p.Method == http.MethodPost {
 		// no final GET required, terminal response should have it
 	} else if rl, rlErr := pollers.GetResourceLocation(p.resp); rlErr != nil && !errors.Is(rlErr, pollers.ErrNoBody) {
 		return rlErr
@@ -140,5 +141,5 @@ func (p *Poller[T]) Result(ctx context.Context, out *T) error {
 		p.resp = resp
 	}
 
-	return pollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
+	return azpollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
 }

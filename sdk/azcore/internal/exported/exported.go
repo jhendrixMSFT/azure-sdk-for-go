@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/exported"
 )
 
 type nopCloser struct {
@@ -32,15 +32,7 @@ func NopCloser(rs io.ReadSeeker) io.ReadSeekCloser {
 // HasStatusCode returns true if the Response's status code is one of the specified values.
 // Exported as runtime.HasStatusCode().
 func HasStatusCode(resp *http.Response, statusCodes ...int) bool {
-	if resp == nil {
-		return false
-	}
-	for _, sc := range statusCodes {
-		if resp.StatusCode == sc {
-			return true
-		}
-	}
-	return false
+	return exported.HasStatusCode(resp, statusCodes...)
 }
 
 // Payload reads and returns the response body or an error.
@@ -48,17 +40,7 @@ func HasStatusCode(resp *http.Response, statusCodes ...int) bool {
 // Subsequent reads will access the cached value.
 // Exported as runtime.Payload().
 func Payload(resp *http.Response) ([]byte, error) {
-	// r.Body won't be a nopClosingBytesReader if downloading was skipped
-	if buf, ok := resp.Body.(*shared.NopClosingBytesReader); ok {
-		return buf.Bytes(), nil
-	}
-	bytesBody, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	resp.Body = shared.NewNopClosingBytesReader(bytesBody)
-	return bytesBody, nil
+	return exported.Payload(resp)
 }
 
 // AccessToken represents an Azure service bearer access token with expiry information.

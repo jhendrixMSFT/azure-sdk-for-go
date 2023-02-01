@@ -13,7 +13,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/log"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	azpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/pollers"
 )
 
 // Kind is the identifier of this type in a resume token.
@@ -99,7 +100,7 @@ func (p *Poller[T]) Done() bool {
 }
 
 func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
-	err := pollers.PollHelper(ctx, p.PollURL, p.pl, func(resp *http.Response) (string, error) {
+	err := azpollers.PollHelper(ctx, p.PollURL, p.pl, func(resp *http.Response) (string, error) {
 		if !pollers.StatusCodeValid(resp) {
 			p.resp = resp
 			return "", exported.NewResponseError(resp)
@@ -130,5 +131,5 @@ func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
 }
 
 func (p *Poller[T]) Result(ctx context.Context, out *T) error {
-	return pollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
+	return azpollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
 }

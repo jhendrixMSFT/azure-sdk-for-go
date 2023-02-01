@@ -14,8 +14,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/log"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	azpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/pollers"
 )
 
 // Kind is the identifier of this type in a resume token.
@@ -85,7 +86,7 @@ func (p *Poller[T]) Done() bool {
 }
 
 func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
-	err := pollers.PollHelper(ctx, p.PollURL, p.pl, func(resp *http.Response) (string, error) {
+	err := azpollers.PollHelper(ctx, p.PollURL, p.pl, func(resp *http.Response) (string, error) {
 		// location polling can return an updated polling URL
 		if h := resp.Header.Get(shared.HeaderLocation); h != "" {
 			p.PollURL = h
@@ -114,5 +115,5 @@ func (p *Poller[T]) Poll(ctx context.Context) (*http.Response, error) {
 }
 
 func (p *Poller[T]) Result(ctx context.Context, out *T) error {
-	return pollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
+	return azpollers.ResultHelper(p.resp, pollers.Failed(p.CurState), out)
 }

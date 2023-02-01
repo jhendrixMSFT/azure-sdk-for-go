@@ -16,8 +16,9 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
+	azpollers "github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/pollers"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,7 +124,7 @@ func TestFinalGetLocation(t *testing.T) {
 		} else {
 			return nil, fmt.Errorf("test bug, unhandled URL %s", surl)
 		}
-	})), resp, pollers.FinalStateViaLocation)
+	})), resp, azpollers.FinalStateViaLocation)
 	require.NoError(t, err)
 	require.False(t, poller.Done())
 	resp, err = poller.Poll(context.Background())
@@ -153,7 +154,7 @@ func TestFinalGetOrigin(t *testing.T) {
 		} else {
 			return nil, fmt.Errorf("test bug, unhandled URL %s", surl)
 		}
-	})), resp, pollers.FinalStateViaOriginalURI)
+	})), resp, azpollers.FinalStateViaOriginalURI)
 	require.NoError(t, err)
 	require.False(t, poller.Done())
 	resp, err = poller.Poll(context.Background())
@@ -174,7 +175,7 @@ func TestNoFinalGet(t *testing.T) {
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{ "status": "succeeded", "shape": "circle" }`)),
 		}, nil
-	})), resp, pollers.FinalStateViaAzureAsyncOp)
+	})), resp, azpollers.FinalStateViaAzureAsyncOp)
 	require.NoError(t, err)
 	require.False(t, poller.Done())
 	resp, err = poller.Poll(context.Background())
@@ -195,7 +196,7 @@ func TestPatchNoFinalGet(t *testing.T) {
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{ "status": "succeeded", "shape": "circle" }`)),
 		}, nil
-	})), resp, pollers.FinalStateViaAzureAsyncOp)
+	})), resp, azpollers.FinalStateViaAzureAsyncOp)
 	require.NoError(t, err)
 	require.False(t, poller.Done())
 	resp, err = poller.Poll(context.Background())

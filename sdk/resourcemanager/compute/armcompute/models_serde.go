@@ -11,9 +11,13 @@ package armcompute
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"io"
 	"reflect"
+	"strings"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
 
 // MarshalJSON implements the json.Marshaller interface for type APIEntityReference.
@@ -9703,7 +9707,7 @@ func (r ResourceSKU) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements the json.Unmarshaller interface for type ResourceSKU.
-func (r *ResourceSKU) UnmarshalJSON(data []byte) error {
+/*func (r *ResourceSKU) UnmarshalJSON(data []byte) error {
 	var rawMsg map[string]json.RawMessage
 	if err := json.Unmarshal(data, &rawMsg); err != nil {
 		return fmt.Errorf("unmarshalling type %T: %v", r, err)
@@ -9756,7 +9760,7 @@ func (r *ResourceSKU) UnmarshalJSON(data []byte) error {
 		}
 	}
 	return nil
-}
+}*/
 
 // MarshalJSON implements the json.Marshaller interface for type ResourceSKUCapabilities.
 func (r ResourceSKUCapabilities) MarshalJSON() ([]byte, error) {
@@ -9766,26 +9770,106 @@ func (r ResourceSKUCapabilities) MarshalJSON() ([]byte, error) {
 	return json.Marshal(objectMap)
 }
 
+type jsonObjectScanner struct {
+	data []byte
+	cur int
+}
+
+func newJSONObjectScanner(data []byte) (*jsonObjectScanner, error) {
+	data = []byte(strings.Trim(string(data), "\""))
+	if len(data) < 2 {
+		return nil, errors.New("malformed JSON object")
+	} else if data[0] != '{' || data[len(data)-1] != '}' {
+		return nil, errors.New("malformed JSON object")
+	}
+	return &jsonObjectScanner{
+		data: data,
+	}, nil
+}
+
+func (js *jsonObjectScanner) nextKey() (string, error) {
+	start := -1
+	var end int
+
+	for i := js.cur; i < len(js.data); i++ {
+		// TODO: reject invalid characters
+		if js.data[i] == '"' {
+			if start > -1 {
+				end = i
+				break
+			} else {
+				start = i
+			}
+		}
+	}
+
+	if end < start {
+		return "", errors.New("invalid JSON key")
+	} else if start == -1 {
+		return "", io.EOF
+	}
+
+	js.cur = end+1
+
+	return string(js.data[start+1:end]), nil
+}
+
+func (js *jsonObjectScanner) getStringValue() (*string, error) {
+	// should be at or just before :
+	var found bool
+	for i := js.cur; i < len(js.data); i++ {
+		if js.data[i] == ':' {
+			found = true
+			js.cur = i
+			break
+		}
+	}
+
+	if !found {
+		return nil, errors.New("missing JSON value delimiter")
+	}
+
+	s, err := js.nextKey()
+	if err != nil {
+		return nil, errors.New("invalid JSON string value")
+	}
+
+	return &s, nil
+}
+
 // UnmarshalJSON implements the json.Unmarshaller interface for type ResourceSKUCapabilities.
 func (r *ResourceSKUCapabilities) UnmarshalJSON(data []byte) error {
-	var rawMsg map[string]json.RawMessage
-	if err := json.Unmarshal(data, &rawMsg); err != nil {
-		return fmt.Errorf("unmarshalling type %T: %v", r, err)
+	// assume that data is the object
+	// { "foo": "bar", "baz": 123 }
+	if len(data) == 0 {
+		return nil
 	}
-	for key, val := range rawMsg {
-		var err error
+
+	scanner, err := newJSONObjectScanner(data)
+	if err != nil {
+		return err
+	}
+
+	for {
+		key, err := scanner.nextKey()
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return err
+		}
+
 		switch key {
 		case "name":
-			err = unpopulate(val, "Name", &r.Name)
-			delete(rawMsg, key)
+			r.Name, err = scanner.getStringValue()
 		case "value":
-			err = unpopulate(val, "Value", &r.Value)
-			delete(rawMsg, key)
+			r.Value, err = scanner.getStringValue()
 		}
+
 		if err != nil {
-			return fmt.Errorf("unmarshalling type %T: %v", r, err)
+			return err
 		}
 	}
+
 	return nil
 }
 
@@ -10015,26 +10099,88 @@ func (r ResourceSKUsResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(objectMap)
 }
 
+type jsonArrayScanner struct {
+	data []byte
+	cur int
+}
+
+func newJSONArrayScanner(data []byte) (*jsonArrayScanner, error) {
+	data = []byte(strings.Trim(string(data), "\""))
+	if len(data) < 2 {
+		return nil, errors.New("malformed JSON array")
+	} else if data[0] != '[' || data[len(data)-1] != ']' {
+		return nil, errors.New("malformed JSON array")
+	}
+	return &jsonArrayScanner{
+		data: data,
+	}, nil
+}
+
+func (js *jsonArrayScanner) nextObject() ([]byte, error) {
+	var start int
+	var end int
+	stack := -1
+
+	for i := js.cur; i < len(js.data); i++ {
+		// TODO: reject invalid chars
+		if js.data[i] == '{' {
+			if stack == -1 {
+				start = i
+				stack = 0
+			} else {
+				stack++
+			}
+		} else if js.data[i] == '}' {
+			if stack == 0 {
+				end = i
+				break
+			} else {
+				stack--
+			}
+		}
+	}
+
+	if start == 0 && end == 0 {
+		// empty array
+		return nil, nil
+	}
+
+	js.cur = end+1
+
+	return  js.data[start:end], nil
+}
+
 // UnmarshalJSON implements the json.Unmarshaller interface for type ResourceSKUsResult.
 func (r *ResourceSKUsResult) UnmarshalJSON(data []byte) error {
-	var rawMsg map[string]json.RawMessage
-	if err := json.Unmarshal(data, &rawMsg); err != nil {
-		return fmt.Errorf("unmarshalling type %T: %v", r, err)
+	if len(data) == 0 {
+		return nil
 	}
-	for key, val := range rawMsg {
-		var err error
+
+	scanner, err := newJSONObjectScanner(data)
+	if err != nil {
+		return err
+	}
+
+	for {
+		key, err := scanner.nextKey()
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return err
+		}
+
 		switch key {
 		case "nextLink":
-			err = unpopulate(val, "NextLink", &r.NextLink)
-			delete(rawMsg, key)
+			r.NextLink, err = scanner.getStringValue()
 		case "value":
-			err = unpopulate(val, "Value", &r.Value)
-			delete(rawMsg, key)
+			r.Value, err = scanner.getStringValue()
 		}
+
 		if err != nil {
-			return fmt.Errorf("unmarshalling type %T: %v", r, err)
+			return err
 		}
 	}
+
 	return nil
 }
 

@@ -5046,10 +5046,10 @@ type ResourceSKU struct {
 // ResourceSKUCapabilities - Describes The SKU capabilities object.
 type ResourceSKUCapabilities struct {
 	// READ-ONLY; An invariant to describe the feature.
-	Name *string `json:"name,omitempty" azure:"ro"`
+	Name *string
 
 	// READ-ONLY; An invariant if the feature is measured by quantity.
-	Value *string `json:"value,omitempty" azure:"ro"`
+	Value *string
 }
 
 // ResourceSKUCapacity - Describes scaling information of a SKU.

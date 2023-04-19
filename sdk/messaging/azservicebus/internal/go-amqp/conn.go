@@ -563,7 +563,16 @@ func (c *Conn) connReader() {
 			continue
 		}
 
-		debug.Log(1, "RX (connReader %p): %s", c, fr)
+		shouldLog := true
+		/*if pd, ok := fr.Body.(*frames.PerformDisposition); ok {
+			if _, accepted := pd.State.(*encoding.StateAccepted); accepted {
+				shouldLog = false
+			}
+		}*/
+
+		if shouldLog {
+			debug.Log(1, "RX (connReader %p): %s", c, fr)
+		}
 
 		var (
 			session *Session
@@ -755,7 +764,21 @@ func (c *Conn) connWriter() {
 		// frame write request
 		case env := <-c.txFrame:
 			timeout := c.getWriteTimeout(env.Ctx)
-			debug.Log(1, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+
+			shouldLog := true
+			/*if pd, ok := env.Frame.Body.(*frames.PerformDisposition); ok {
+				if _, accepted := pd.State.(*encoding.StateAccepted); accepted {
+					shouldLog = false
+				}
+			}*/
+			if _, ok := env.Frame.Body.(*frames.PerformTransfer); ok {
+				shouldLog = false
+			}
+
+			if shouldLog {
+				debug.Log(1, "TX (connWriter %p) timeout %s: %s", c, timeout, env.Frame)
+			}
+
 			err = c.writeFrame(timeout, env.Frame)
 			if env.Sent != nil {
 				if err == nil {

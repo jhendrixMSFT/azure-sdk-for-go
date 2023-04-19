@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
@@ -77,6 +78,9 @@ func Retry(ctx context.Context, eventName log.Event, operation string, fn func(c
 		}
 
 		if err != nil {
+			if strings.Contains(err.Error(), "session channel") {
+				panic(err)
+			}
 			if isFatalFn(err) {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					log.Writef(eventName, "(%s) Retry attempt %d was cancelled, stopping: %s", operation, i, err.Error())

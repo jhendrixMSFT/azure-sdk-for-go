@@ -21,8 +21,8 @@ import (
 func SendAndReceiveDrain(remainingArgs []string) {
 	sc := shared.MustCreateStressContext("SendAndReceiveDrainTest")
 
-	sc.TrackEvent("Start")
-	defer sc.End()
+	//sc.TrackEvent("Start")
+	//defer sc.End()
 
 	queueName := strings.ToLower(fmt.Sprintf("queue-%X", time.Now().UnixNano()))
 

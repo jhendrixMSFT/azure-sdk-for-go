@@ -60,7 +60,7 @@ func MustCreateAutoDeletingQueue(sc *StressContext, queueName string, qp *admin.
 		newQP = *qp
 	}
 
-	autoDeleteOnIdle := "PT10M"
+	autoDeleteOnIdle := "PT120M"
 	newQP.AutoDeleteOnIdle = &autoDeleteOnIdle
 
 	// mostly useful for tracking backwards in case something goes wrong.

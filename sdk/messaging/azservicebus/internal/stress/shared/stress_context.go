@@ -46,7 +46,7 @@ func MustCreateStressContext(testName string) *StressContext {
 		log.Fatalf("missing SERVICEBUS_CONNECTION_STRING environment variable")
 	}
 
-	aiKey := os.Getenv("APPINSIGHTS_INSTRUMENTATIONKEY")
+	/*aiKey := os.Getenv("APPINSIGHTS_INSTRUMENTATIONKEY")
 
 	if aiKey == "" {
 		log.Fatalf("missing APPINSIGHTS_INSTRUMENTATIONKEY environment variable")
@@ -63,7 +63,9 @@ func MustCreateStressContext(testName string) *StressContext {
 		"TestRunId": testRunID,
 	}
 
-	log.Printf("Common properties\n:%#v", telemetryClient.Context().CommonProperties)
+	log.Printf("Common properties\n:%#v", telemetryClient.Context().CommonProperties)*/
+
+	testRunID := strings.ToLower(fmt.Sprintf("%X", time.Now().UnixNano()))
 
 	ctx, cancel := NewCtrlCContext()
 
@@ -91,14 +93,14 @@ func MustCreateStressContext(testName string) *StressContext {
 		TestRunID:        testRunID,
 		Nano:             testRunID, // the same for now
 		ConnectionString: cs,
-		TelemetryClient:  telemetryClient,
+		//TelemetryClient:  telemetryClient,
 		// you could always change the interval here. A minute feels like often enough
 		// to know things are running, while not so often that you end up flooding logging
 		// with duplicate information.
-		statsPrinter: newStatsPrinter(ctx, testName, time.Minute, telemetryClient),
-		logMessages:  logMessages,
-		Context:      ctx,
-		cancel:       cancel,
+		//statsPrinter: newStatsPrinter(ctx, testName, time.Minute, telemetryClient),
+		logMessages: logMessages,
+		Context:     ctx,
+		cancel:      cancel,
 	}
 }
 

@@ -5,12 +5,9 @@ package tests
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/stress/shared"
 )
 
 // Simple query to view some of the stats reported by these stress tests.
@@ -57,9 +54,9 @@ func Run(remainingArgs []string) {
 		printUsageAndQuit(allTests)
 	}
 
-	if err := shared.LoadEnvironment(); err != nil {
+	/*if err := shared.LoadEnvironment(); err != nil {
 		log.Fatalf("Failed to load .env file: %s", err.Error())
-	}
+	}*/
 
 	testFn(remainingArgs[1:])
 }

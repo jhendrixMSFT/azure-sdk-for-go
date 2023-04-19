@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/go-amqp/internal/buffer"
@@ -90,6 +91,7 @@ func (r *Receiver) Prefetched() *Message {
 		return nil
 	}
 
+	fmt.Fprintf(os.Stderr, "Receiver prefetched MessageID %s\n", msg.Properties.MessageID)
 	debug.Log(3, "RX (Receiver %p): prefetched delivery ID %d", r, msg.deliveryID)
 
 	if msg.settled {
@@ -121,6 +123,7 @@ func (r *Receiver) Receive(ctx context.Context, opts *ReceiveOptions) (*Message,
 		msg := q.Dequeue()
 		debug.Assert(msg != nil)
 		debug.Log(3, "RX (Receiver %p): received delivery ID %d", r, msg.deliveryID)
+		fmt.Fprintf(os.Stderr, "Receiver received MessageID %s\n", msg.Properties.MessageID)
 		r.messagesQ.Release(q)
 		if msg.settled {
 			r.onSettlement(1)
@@ -256,8 +259,6 @@ func (r *Receiver) sendDisposition(ctx context.Context, first uint32, last *uint
 	select {
 	case <-r.l.done:
 		return r.l.doneErr
-	case <-ctx.Done():
-		return ctx.Err()
 	case r.txDisposition <- frameBodyEnvelope{Ctx: ctx, FrameBody: fr, Sent: sent}:
 		debug.Log(2, "TX (Receiver %p): mux txDisposition %s", r, fr)
 	}
@@ -804,6 +805,8 @@ func (r *Receiver) muxReceive(fr frames.PerformTransfer) {
 		r.l.closeWithError(ErrCondInternalError, err.Error())
 		return
 	}
+
+	debug.Log(1, "RX (Receiver %p): DeliveryID: %d, MessageID: %s", r, *fr.DeliveryID, r.msg.Properties.MessageID)
 
 	// send to receiver
 	if !r.msg.settled {

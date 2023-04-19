@@ -440,6 +440,7 @@ func (r *Receiver) receiveMessagesImpl(ctx context.Context, maxMessages int, opt
 	var receivedMessages []*ReceivedMessage
 
 	for _, msg := range result.Messages {
+		log.Writef(EventReceiver, "receiveMessagesImpl received MessageID %s", msg.Properties.MessageID)
 		receivedMessages = append(receivedMessages, newReceivedMessage(msg, linksWithID.Receiver.LinkName()))
 	}
 
@@ -623,11 +624,17 @@ func (r *Receiver) newReleaserFunc(receiver amqpwrap.AMQPReceiver) func() {
 			msg, err := receiver.Receive(ctx, nil)
 
 			if err == nil {
+				log.Writef(exported.EventReceiver, "[%s] Message releaser releasing message %s", receiver.LinkName(), msg.Properties.MessageID)
 				err = receiver.ReleaseMessage(ctx, msg)
-			}
 
-			if err == nil {
-				released++
+				if err == nil {
+					released++
+				} else {
+					log.Writef(exported.EventReceiver, "[%s] Message releaser error releasing message %s: %v", receiver.LinkName(), msg.Properties.MessageID, err)
+				}
+
+			} else {
+				log.Writef(exported.EventReceiver, "[%s] Message releaser receive error: %v", receiver.LinkName(), err)
 			}
 
 			if internal.IsCancelError(err) {

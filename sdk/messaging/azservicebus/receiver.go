@@ -619,6 +619,8 @@ func (r *Receiver) newReleaserFunc(receiver amqpwrap.AMQPReceiver) func() {
 
 		log.Writef(EventReceiver, "[%s] Message releaser starting...", receiver.LinkName())
 
+		receiver.SetCredit(0)
+
 		for {
 			// we might not have all the messages we need here.
 			msg, err := receiver.Receive(ctx, nil)

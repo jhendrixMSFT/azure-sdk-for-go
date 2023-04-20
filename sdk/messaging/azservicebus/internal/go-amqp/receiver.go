@@ -67,6 +67,10 @@ func (r *Receiver) IssueCredit(credit uint32) error {
 	return nil
 }
 
+func (r *Receiver) SetCredit(credit uint32) {
+	r.creditor.SetCredit(credit)
+}
+
 // Prefetched returns the next message that is stored in the Receiver's
 // prefetch cache. It does NOT wait for the remote sender to send messages
 // and returns immediately if the prefetch cache is empty. To receive from the
@@ -547,13 +551,21 @@ func (r *Receiver) mux(hooks receiverTestHooks) {
 			return
 		}
 
-		drain, credits := r.creditor.FlowBits(r.l.linkCredit)
-		if drain || credits > 0 {
+		if credits, ok := r.creditor.FlowAbsolute(); ok {
 			debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
-				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+				r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, false, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
 
 			// send a flow frame.
-			r.l.doneErr = r.muxFlow(credits, drain)
+			r.l.doneErr = r.muxFlow(credits, false)
+		} else {
+			drain, credits := r.creditor.FlowBits(r.l.linkCredit)
+			if drain || credits > 0 {
+				debug.Log(1, "RX (Receiver %p) (flow): source: %q, inflight: %d, curLinkCredit: %d, newLinkCredit: %d, drain: %v, deliveryCount: %d, messages: %d, unsettled: %d, settlementCount: %d, settleMode: %s",
+					r, r.l.source.Address, r.inFlight.len(), r.l.linkCredit, credits, drain, r.l.deliveryCount, msgLen, r.countUnsettled(), previousSettlementCount, r.l.receiverSettleMode.String())
+
+				// send a flow frame.
+				r.l.doneErr = r.muxFlow(credits, drain)
+			}
 		}
 
 		if r.l.doneErr != nil {

@@ -18,6 +18,7 @@ type AMQPReceiver interface {
 	IssueCredit(credit uint32) error
 	Receive(ctx context.Context, o *amqp.ReceiveOptions) (*amqp.Message, error)
 	Prefetched() *amqp.Message
+	SetCredit(credit uint32)
 
 	// settlement functions
 	AcceptMessage(ctx context.Context, msg *amqp.Message) error
@@ -82,6 +83,7 @@ type goamqpReceiver interface {
 	IssueCredit(credit uint32) error
 	Receive(ctx context.Context, o *amqp.ReceiveOptions) (*amqp.Message, error)
 	Prefetched() *amqp.Message
+	SetCredit(credit uint32)
 
 	// settlement functions
 	AcceptMessage(ctx context.Context, msg *amqp.Message) error
@@ -181,7 +183,9 @@ func (rw *AMQPReceiverWrapper) Receive(ctx context.Context, o *amqp.ReceiveOptio
 		return nil, err
 	}
 
-	rw.credits--
+	if rw.credits > 0 {
+		rw.credits--
+	}
 	return message, nil
 }
 
@@ -192,8 +196,15 @@ func (rw *AMQPReceiverWrapper) Prefetched() *amqp.Message {
 		return nil
 	}
 
-	rw.credits--
+	if rw.credits > 0 {
+		rw.credits--
+	}
 	return msg
+}
+
+func (rw *AMQPReceiverWrapper) SetCredit(credit uint32) {
+	rw.Inner.SetCredit(credit)
+	rw.credits = credit
 }
 
 // settlement functions

@@ -12,6 +12,7 @@ type creditor struct {
 	mu sync.Mutex
 
 	// future values for the next flow frame.
+	setAbsolute  bool
 	pendingDrain bool
 	creditsToAdd uint32
 
@@ -116,4 +117,21 @@ func (mc *creditor) IssueCredit(credits uint32) error {
 
 	mc.creditsToAdd += credits
 	return nil
+}
+
+func (mc *creditor) SetCredit(credits uint32) {
+	mc.creditsToAdd = credits
+	mc.setAbsolute = true
+}
+
+func (mc *creditor) FlowAbsolute() (uint32, bool) {
+	if !mc.setAbsolute {
+		return 0, false
+	}
+
+	credits := mc.creditsToAdd
+	mc.setAbsolute = false
+	mc.creditsToAdd = 0
+
+	return credits, true
 }

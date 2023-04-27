@@ -28,7 +28,7 @@ type SubscriptionClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewSubscriptionClient(credential azcore.TokenCredential, options *arm.ClientOptions) (*SubscriptionClient, error) {
-	cl, err := arm.NewClient(moduleName+".SubscriptionClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armsubscriptions.SubscriptionClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -45,19 +45,23 @@ func NewSubscriptionClient(credential azcore.TokenCredential, options *arm.Clien
 // Generated from API version 2021-01-01
 //   - options - SubscriptionClientCheckResourceNameOptions contains the optional parameters for the SubscriptionClient.CheckResourceName
 //     method.
-func (client *SubscriptionClient) CheckResourceName(ctx context.Context, options *SubscriptionClientCheckResourceNameOptions) (SubscriptionClientCheckResourceNameResponse, error) {
+func (client *SubscriptionClient) CheckResourceName(ctx context.Context, options *SubscriptionClientCheckResourceNameOptions) (result SubscriptionClientCheckResourceNameResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "SubscriptionClient.CheckResourceName", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.checkResourceNameCreateRequest(ctx, options)
 	if err != nil {
-		return SubscriptionClientCheckResourceNameResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return SubscriptionClientCheckResourceNameResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return SubscriptionClientCheckResourceNameResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.checkResourceNameHandleResponse(resp)
+	result, err = client.checkResourceNameHandleResponse(resp)
+	return
 }
 
 // checkResourceNameCreateRequest creates the CheckResourceName request.
@@ -78,10 +82,10 @@ func (client *SubscriptionClient) checkResourceNameCreateRequest(ctx context.Con
 }
 
 // checkResourceNameHandleResponse handles the CheckResourceName response.
-func (client *SubscriptionClient) checkResourceNameHandleResponse(resp *http.Response) (SubscriptionClientCheckResourceNameResponse, error) {
-	result := SubscriptionClientCheckResourceNameResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.CheckResourceNameResult); err != nil {
-		return SubscriptionClientCheckResourceNameResponse{}, err
+func (client *SubscriptionClient) checkResourceNameHandleResponse(resp *http.Response) (result SubscriptionClientCheckResourceNameResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.CheckResourceNameResult); err != nil {
+		result = SubscriptionClientCheckResourceNameResponse{}
+		return
 	}
 	return result, nil
 }

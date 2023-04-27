@@ -33,7 +33,7 @@ type TagsClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewTagsClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*TagsClient, error) {
-	cl, err := arm.NewClient(moduleName+".TagsClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armresources.TagsClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -52,19 +52,23 @@ func NewTagsClient(subscriptionID string, credential azcore.TokenCredential, opt
 // Generated from API version 2021-04-01
 //   - tagName - The name of the tag to create.
 //   - options - TagsClientCreateOrUpdateOptions contains the optional parameters for the TagsClient.CreateOrUpdate method.
-func (client *TagsClient) CreateOrUpdate(ctx context.Context, tagName string, options *TagsClientCreateOrUpdateOptions) (TagsClientCreateOrUpdateResponse, error) {
+func (client *TagsClient) CreateOrUpdate(ctx context.Context, tagName string, options *TagsClientCreateOrUpdateOptions) (result TagsClientCreateOrUpdateResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.CreateOrUpdate", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.createOrUpdateCreateRequest(ctx, tagName, options)
 	if err != nil {
-		return TagsClientCreateOrUpdateResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientCreateOrUpdateResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusCreated) {
-		return TagsClientCreateOrUpdateResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.createOrUpdateHandleResponse(resp)
+	result, err = client.createOrUpdateHandleResponse(resp)
+	return
 }
 
 // createOrUpdateCreateRequest creates the CreateOrUpdate request.
@@ -90,10 +94,10 @@ func (client *TagsClient) createOrUpdateCreateRequest(ctx context.Context, tagNa
 }
 
 // createOrUpdateHandleResponse handles the CreateOrUpdate response.
-func (client *TagsClient) createOrUpdateHandleResponse(resp *http.Response) (TagsClientCreateOrUpdateResponse, error) {
-	result := TagsClientCreateOrUpdateResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagDetails); err != nil {
-		return TagsClientCreateOrUpdateResponse{}, err
+func (client *TagsClient) createOrUpdateHandleResponse(resp *http.Response) (result TagsClientCreateOrUpdateResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagDetails); err != nil {
+		result = TagsClientCreateOrUpdateResponse{}
+		return
 	}
 	return result, nil
 }
@@ -106,19 +110,23 @@ func (client *TagsClient) createOrUpdateHandleResponse(resp *http.Response) (Tag
 //   - scope - The resource scope.
 //   - options - TagsClientCreateOrUpdateAtScopeOptions contains the optional parameters for the TagsClient.CreateOrUpdateAtScope
 //     method.
-func (client *TagsClient) CreateOrUpdateAtScope(ctx context.Context, scope string, parameters TagsResource, options *TagsClientCreateOrUpdateAtScopeOptions) (TagsClientCreateOrUpdateAtScopeResponse, error) {
+func (client *TagsClient) CreateOrUpdateAtScope(ctx context.Context, scope string, parameters TagsResource, options *TagsClientCreateOrUpdateAtScopeOptions) (result TagsClientCreateOrUpdateAtScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.CreateOrUpdateAtScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.createOrUpdateAtScopeCreateRequest(ctx, scope, parameters, options)
 	if err != nil {
-		return TagsClientCreateOrUpdateAtScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientCreateOrUpdateAtScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return TagsClientCreateOrUpdateAtScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.createOrUpdateAtScopeHandleResponse(resp)
+	result, err = client.createOrUpdateAtScopeHandleResponse(resp)
+	return
 }
 
 // createOrUpdateAtScopeCreateRequest creates the CreateOrUpdateAtScope request.
@@ -137,10 +145,10 @@ func (client *TagsClient) createOrUpdateAtScopeCreateRequest(ctx context.Context
 }
 
 // createOrUpdateAtScopeHandleResponse handles the CreateOrUpdateAtScope response.
-func (client *TagsClient) createOrUpdateAtScopeHandleResponse(resp *http.Response) (TagsClientCreateOrUpdateAtScopeResponse, error) {
-	result := TagsClientCreateOrUpdateAtScopeResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
-		return TagsClientCreateOrUpdateAtScopeResponse{}, err
+func (client *TagsClient) createOrUpdateAtScopeHandleResponse(resp *http.Response) (result TagsClientCreateOrUpdateAtScopeResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
+		result = TagsClientCreateOrUpdateAtScopeResponse{}
+		return
 	}
 	return result, nil
 }
@@ -154,19 +162,23 @@ func (client *TagsClient) createOrUpdateAtScopeHandleResponse(resp *http.Respons
 //   - tagValue - The value of the tag to create.
 //   - options - TagsClientCreateOrUpdateValueOptions contains the optional parameters for the TagsClient.CreateOrUpdateValue
 //     method.
-func (client *TagsClient) CreateOrUpdateValue(ctx context.Context, tagName string, tagValue string, options *TagsClientCreateOrUpdateValueOptions) (TagsClientCreateOrUpdateValueResponse, error) {
+func (client *TagsClient) CreateOrUpdateValue(ctx context.Context, tagName string, tagValue string, options *TagsClientCreateOrUpdateValueOptions) (result TagsClientCreateOrUpdateValueResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.CreateOrUpdateValue", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.createOrUpdateValueCreateRequest(ctx, tagName, tagValue, options)
 	if err != nil {
-		return TagsClientCreateOrUpdateValueResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientCreateOrUpdateValueResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusCreated) {
-		return TagsClientCreateOrUpdateValueResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.createOrUpdateValueHandleResponse(resp)
+	result, err = client.createOrUpdateValueHandleResponse(resp)
+	return
 }
 
 // createOrUpdateValueCreateRequest creates the CreateOrUpdateValue request.
@@ -196,10 +208,10 @@ func (client *TagsClient) createOrUpdateValueCreateRequest(ctx context.Context, 
 }
 
 // createOrUpdateValueHandleResponse handles the CreateOrUpdateValue response.
-func (client *TagsClient) createOrUpdateValueHandleResponse(resp *http.Response) (TagsClientCreateOrUpdateValueResponse, error) {
-	result := TagsClientCreateOrUpdateValueResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagValue); err != nil {
-		return TagsClientCreateOrUpdateValueResponse{}, err
+func (client *TagsClient) createOrUpdateValueHandleResponse(resp *http.Response) (result TagsClientCreateOrUpdateValueResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagValue); err != nil {
+		result = TagsClientCreateOrUpdateValueResponse{}
+		return
 	}
 	return result, nil
 }
@@ -212,19 +224,22 @@ func (client *TagsClient) createOrUpdateValueHandleResponse(resp *http.Response)
 // Generated from API version 2021-04-01
 //   - tagName - The name of the tag.
 //   - options - TagsClientDeleteOptions contains the optional parameters for the TagsClient.Delete method.
-func (client *TagsClient) Delete(ctx context.Context, tagName string, options *TagsClientDeleteOptions) (TagsClientDeleteResponse, error) {
+func (client *TagsClient) Delete(ctx context.Context, tagName string, options *TagsClientDeleteOptions) (result TagsClientDeleteResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.Delete", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.deleteCreateRequest(ctx, tagName, options)
 	if err != nil {
-		return TagsClientDeleteResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientDeleteResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusNoContent) {
-		return TagsClientDeleteResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return TagsClientDeleteResponse{}, nil
+	return
 }
 
 // deleteCreateRequest creates the Delete request.
@@ -255,19 +270,22 @@ func (client *TagsClient) deleteCreateRequest(ctx context.Context, tagName strin
 // Generated from API version 2021-04-01
 //   - scope - The resource scope.
 //   - options - TagsClientDeleteAtScopeOptions contains the optional parameters for the TagsClient.DeleteAtScope method.
-func (client *TagsClient) DeleteAtScope(ctx context.Context, scope string, options *TagsClientDeleteAtScopeOptions) (TagsClientDeleteAtScopeResponse, error) {
+func (client *TagsClient) DeleteAtScope(ctx context.Context, scope string, options *TagsClientDeleteAtScopeOptions) (result TagsClientDeleteAtScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.DeleteAtScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.deleteAtScopeCreateRequest(ctx, scope, options)
 	if err != nil {
-		return TagsClientDeleteAtScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientDeleteAtScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return TagsClientDeleteAtScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return TagsClientDeleteAtScopeResponse{}, nil
+	return
 }
 
 // deleteAtScopeCreateRequest creates the DeleteAtScope request.
@@ -294,19 +312,22 @@ func (client *TagsClient) deleteAtScopeCreateRequest(ctx context.Context, scope 
 //   - tagName - The name of the tag.
 //   - tagValue - The value of the tag to delete.
 //   - options - TagsClientDeleteValueOptions contains the optional parameters for the TagsClient.DeleteValue method.
-func (client *TagsClient) DeleteValue(ctx context.Context, tagName string, tagValue string, options *TagsClientDeleteValueOptions) (TagsClientDeleteValueResponse, error) {
+func (client *TagsClient) DeleteValue(ctx context.Context, tagName string, tagValue string, options *TagsClientDeleteValueOptions) (result TagsClientDeleteValueResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.DeleteValue", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.deleteValueCreateRequest(ctx, tagName, tagValue, options)
 	if err != nil {
-		return TagsClientDeleteValueResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientDeleteValueResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusNoContent) {
-		return TagsClientDeleteValueResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return TagsClientDeleteValueResponse{}, nil
+	return
 }
 
 // deleteValueCreateRequest creates the DeleteValue request.
@@ -341,19 +362,23 @@ func (client *TagsClient) deleteValueCreateRequest(ctx context.Context, tagName 
 // Generated from API version 2021-04-01
 //   - scope - The resource scope.
 //   - options - TagsClientGetAtScopeOptions contains the optional parameters for the TagsClient.GetAtScope method.
-func (client *TagsClient) GetAtScope(ctx context.Context, scope string, options *TagsClientGetAtScopeOptions) (TagsClientGetAtScopeResponse, error) {
+func (client *TagsClient) GetAtScope(ctx context.Context, scope string, options *TagsClientGetAtScopeOptions) (result TagsClientGetAtScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.GetAtScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.getAtScopeCreateRequest(ctx, scope, options)
 	if err != nil {
-		return TagsClientGetAtScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientGetAtScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return TagsClientGetAtScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.getAtScopeHandleResponse(resp)
+	result, err = client.getAtScopeHandleResponse(resp)
+	return
 }
 
 // getAtScopeCreateRequest creates the GetAtScope request.
@@ -372,10 +397,10 @@ func (client *TagsClient) getAtScopeCreateRequest(ctx context.Context, scope str
 }
 
 // getAtScopeHandleResponse handles the GetAtScope response.
-func (client *TagsClient) getAtScopeHandleResponse(resp *http.Response) (TagsClientGetAtScopeResponse, error) {
-	result := TagsClientGetAtScopeResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
-		return TagsClientGetAtScopeResponse{}, err
+func (client *TagsClient) getAtScopeHandleResponse(resp *http.Response) (result TagsClientGetAtScopeResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
+		result = TagsClientGetAtScopeResponse{}
+		return
 	}
 	return result, nil
 }
@@ -391,25 +416,28 @@ func (client *TagsClient) NewListPager(options *TagsClientListOptions) *runtime.
 		More: func(page TagsClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *TagsClientListResponse) (TagsClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *TagsClientListResponse) (result TagsClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[TagsClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return TagsClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return TagsClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return TagsClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -433,10 +461,10 @@ func (client *TagsClient) listCreateRequest(ctx context.Context, options *TagsCl
 }
 
 // listHandleResponse handles the List response.
-func (client *TagsClient) listHandleResponse(resp *http.Response) (TagsClientListResponse, error) {
-	result := TagsClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagsListResult); err != nil {
-		return TagsClientListResponse{}, err
+func (client *TagsClient) listHandleResponse(resp *http.Response) (result TagsClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagsListResult); err != nil {
+		result = TagsClientListResponse{}
+		return
 	}
 	return result, nil
 }
@@ -451,19 +479,23 @@ func (client *TagsClient) listHandleResponse(resp *http.Response) (TagsClientLis
 // Generated from API version 2021-04-01
 //   - scope - The resource scope.
 //   - options - TagsClientUpdateAtScopeOptions contains the optional parameters for the TagsClient.UpdateAtScope method.
-func (client *TagsClient) UpdateAtScope(ctx context.Context, scope string, parameters TagsPatchResource, options *TagsClientUpdateAtScopeOptions) (TagsClientUpdateAtScopeResponse, error) {
+func (client *TagsClient) UpdateAtScope(ctx context.Context, scope string, parameters TagsPatchResource, options *TagsClientUpdateAtScopeOptions) (result TagsClientUpdateAtScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "TagsClient.UpdateAtScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.updateAtScopeCreateRequest(ctx, scope, parameters, options)
 	if err != nil {
-		return TagsClientUpdateAtScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return TagsClientUpdateAtScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return TagsClientUpdateAtScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.updateAtScopeHandleResponse(resp)
+	result, err = client.updateAtScopeHandleResponse(resp)
+	return
 }
 
 // updateAtScopeCreateRequest creates the UpdateAtScope request.
@@ -482,10 +514,10 @@ func (client *TagsClient) updateAtScopeCreateRequest(ctx context.Context, scope 
 }
 
 // updateAtScopeHandleResponse handles the UpdateAtScope response.
-func (client *TagsClient) updateAtScopeHandleResponse(resp *http.Response) (TagsClientUpdateAtScopeResponse, error) {
-	result := TagsClientUpdateAtScopeResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
-		return TagsClientUpdateAtScopeResponse{}, err
+func (client *TagsClient) updateAtScopeHandleResponse(resp *http.Response) (result TagsClientUpdateAtScopeResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TagsResource); err != nil {
+		result = TagsClientUpdateAtScopeResponse{}
+		return
 	}
 	return result, nil
 }

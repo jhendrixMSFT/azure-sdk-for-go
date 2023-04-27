@@ -33,7 +33,7 @@ type ProviderResourceTypesClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewProviderResourceTypesClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*ProviderResourceTypesClient, error) {
-	cl, err := arm.NewClient(moduleName+".ProviderResourceTypesClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armresources.ProviderResourceTypesClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -51,19 +51,23 @@ func NewProviderResourceTypesClient(subscriptionID string, credential azcore.Tok
 //   - resourceProviderNamespace - The namespace of the resource provider.
 //   - options - ProviderResourceTypesClientListOptions contains the optional parameters for the ProviderResourceTypesClient.List
 //     method.
-func (client *ProviderResourceTypesClient) List(ctx context.Context, resourceProviderNamespace string, options *ProviderResourceTypesClientListOptions) (ProviderResourceTypesClientListResponse, error) {
+func (client *ProviderResourceTypesClient) List(ctx context.Context, resourceProviderNamespace string, options *ProviderResourceTypesClientListOptions) (result ProviderResourceTypesClientListResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProviderResourceTypesClient.List", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.listCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProviderResourceTypesClientListResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProviderResourceTypesClientListResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProviderResourceTypesClientListResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.listHandleResponse(resp)
+	result, err = client.listHandleResponse(resp)
+	return
 }
 
 // listCreateRequest creates the List request.
@@ -92,10 +96,10 @@ func (client *ProviderResourceTypesClient) listCreateRequest(ctx context.Context
 }
 
 // listHandleResponse handles the List response.
-func (client *ProviderResourceTypesClient) listHandleResponse(resp *http.Response) (ProviderResourceTypesClientListResponse, error) {
-	result := ProviderResourceTypesClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ProviderResourceTypeListResult); err != nil {
-		return ProviderResourceTypesClientListResponse{}, err
+func (client *ProviderResourceTypesClient) listHandleResponse(resp *http.Response) (result ProviderResourceTypesClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ProviderResourceTypeListResult); err != nil {
+		result = ProviderResourceTypesClientListResponse{}
+		return
 	}
 	return result, nil
 }

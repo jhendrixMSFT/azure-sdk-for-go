@@ -32,7 +32,7 @@ type Client struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewClient(credential azcore.TokenCredential, options *arm.ClientOptions) (*Client, error) {
-	cl, err := arm.NewClient(moduleName+".Client", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armsubscriptions.Client", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -49,19 +49,23 @@ func NewClient(credential azcore.TokenCredential, options *arm.ClientOptions) (*
 //   - subscriptionID - The ID of the target subscription.
 //   - parameters - Parameters for checking zone peers.
 //   - options - ClientCheckZonePeersOptions contains the optional parameters for the Client.CheckZonePeers method.
-func (client *Client) CheckZonePeers(ctx context.Context, subscriptionID string, parameters CheckZonePeersRequest, options *ClientCheckZonePeersOptions) (ClientCheckZonePeersResponse, error) {
+func (client *Client) CheckZonePeers(ctx context.Context, subscriptionID string, parameters CheckZonePeersRequest, options *ClientCheckZonePeersOptions) (result ClientCheckZonePeersResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "Client.CheckZonePeers", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.checkZonePeersCreateRequest(ctx, subscriptionID, parameters, options)
 	if err != nil {
-		return ClientCheckZonePeersResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ClientCheckZonePeersResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ClientCheckZonePeersResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.checkZonePeersHandleResponse(resp)
+	result, err = client.checkZonePeersHandleResponse(resp)
+	return
 }
 
 // checkZonePeersCreateRequest creates the CheckZonePeers request.
@@ -83,10 +87,10 @@ func (client *Client) checkZonePeersCreateRequest(ctx context.Context, subscript
 }
 
 // checkZonePeersHandleResponse handles the CheckZonePeers response.
-func (client *Client) checkZonePeersHandleResponse(resp *http.Response) (ClientCheckZonePeersResponse, error) {
-	result := ClientCheckZonePeersResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.CheckZonePeersResult); err != nil {
-		return ClientCheckZonePeersResponse{}, err
+func (client *Client) checkZonePeersHandleResponse(resp *http.Response) (result ClientCheckZonePeersResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.CheckZonePeersResult); err != nil {
+		result = ClientCheckZonePeersResponse{}
+		return
 	}
 	return result, nil
 }
@@ -97,19 +101,23 @@ func (client *Client) checkZonePeersHandleResponse(resp *http.Response) (ClientC
 // Generated from API version 2021-01-01
 //   - subscriptionID - The ID of the target subscription.
 //   - options - ClientGetOptions contains the optional parameters for the Client.Get method.
-func (client *Client) Get(ctx context.Context, subscriptionID string, options *ClientGetOptions) (ClientGetResponse, error) {
+func (client *Client) Get(ctx context.Context, subscriptionID string, options *ClientGetOptions) (result ClientGetResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "Client.Get", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.getCreateRequest(ctx, subscriptionID, options)
 	if err != nil {
-		return ClientGetResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ClientGetResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ClientGetResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.getHandleResponse(resp)
+	result, err = client.getHandleResponse(resp)
+	return
 }
 
 // getCreateRequest creates the Get request.
@@ -131,10 +139,10 @@ func (client *Client) getCreateRequest(ctx context.Context, subscriptionID strin
 }
 
 // getHandleResponse handles the Get response.
-func (client *Client) getHandleResponse(resp *http.Response) (ClientGetResponse, error) {
-	result := ClientGetResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Subscription); err != nil {
-		return ClientGetResponse{}, err
+func (client *Client) getHandleResponse(resp *http.Response) (result ClientGetResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.Subscription); err != nil {
+		result = ClientGetResponse{}
+		return
 	}
 	return result, nil
 }
@@ -148,25 +156,28 @@ func (client *Client) NewListPager(options *ClientListOptions) *runtime.Pager[Cl
 		More: func(page ClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *ClientListResponse) (ClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *ClientListResponse) (result ClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[ClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return ClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return ClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return ClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -186,10 +197,10 @@ func (client *Client) listCreateRequest(ctx context.Context, options *ClientList
 }
 
 // listHandleResponse handles the List response.
-func (client *Client) listHandleResponse(resp *http.Response) (ClientListResponse, error) {
-	result := ClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.SubscriptionListResult); err != nil {
-		return ClientListResponse{}, err
+func (client *Client) listHandleResponse(resp *http.Response) (result ClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.SubscriptionListResult); err != nil {
+		result = ClientListResponse{}
+		return
 	}
 	return result, nil
 }
@@ -205,19 +216,23 @@ func (client *Client) NewListLocationsPager(subscriptionID string, options *Clie
 		More: func(page ClientListLocationsResponse) bool {
 			return false
 		},
-		Fetcher: func(ctx context.Context, page *ClientListLocationsResponse) (ClientListLocationsResponse, error) {
+		Fetcher: func(ctx context.Context, page *ClientListLocationsResponse) (result ClientListLocationsResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[ClientListLocationsResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			req, err := client.listLocationsCreateRequest(ctx, subscriptionID, options)
 			if err != nil {
-				return ClientListLocationsResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return ClientListLocationsResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return ClientListLocationsResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listLocationsHandleResponse(resp)
+			result, err = client.listLocationsHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -244,10 +259,10 @@ func (client *Client) listLocationsCreateRequest(ctx context.Context, subscripti
 }
 
 // listLocationsHandleResponse handles the ListLocations response.
-func (client *Client) listLocationsHandleResponse(resp *http.Response) (ClientListLocationsResponse, error) {
-	result := ClientListLocationsResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.LocationListResult); err != nil {
-		return ClientListLocationsResponse{}, err
+func (client *Client) listLocationsHandleResponse(resp *http.Response) (result ClientListLocationsResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.LocationListResult); err != nil {
+		result = ClientListLocationsResponse{}
+		return
 	}
 	return result, nil
 }

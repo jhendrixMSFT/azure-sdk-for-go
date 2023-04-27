@@ -33,7 +33,7 @@ type ProvidersClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewProvidersClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*ProvidersClient, error) {
-	cl, err := arm.NewClient(moduleName+".ProvidersClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armresources.ProvidersClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -50,19 +50,23 @@ func NewProvidersClient(subscriptionID string, credential azcore.TokenCredential
 // Generated from API version 2021-04-01
 //   - resourceProviderNamespace - The namespace of the resource provider.
 //   - options - ProvidersClientGetOptions contains the optional parameters for the ProvidersClient.Get method.
-func (client *ProvidersClient) Get(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientGetOptions) (ProvidersClientGetResponse, error) {
+func (client *ProvidersClient) Get(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientGetOptions) (result ProvidersClientGetResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.Get", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.getCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProvidersClientGetResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientGetResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientGetResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.getHandleResponse(resp)
+	result, err = client.getHandleResponse(resp)
+	return
 }
 
 // getCreateRequest creates the Get request.
@@ -91,10 +95,10 @@ func (client *ProvidersClient) getCreateRequest(ctx context.Context, resourcePro
 }
 
 // getHandleResponse handles the Get response.
-func (client *ProvidersClient) getHandleResponse(resp *http.Response) (ProvidersClientGetResponse, error) {
-	result := ProvidersClientGetResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
-		return ProvidersClientGetResponse{}, err
+func (client *ProvidersClient) getHandleResponse(resp *http.Response) (result ProvidersClientGetResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
+		result = ProvidersClientGetResponse{}
+		return
 	}
 	return result, nil
 }
@@ -106,19 +110,23 @@ func (client *ProvidersClient) getHandleResponse(resp *http.Response) (Providers
 //   - resourceProviderNamespace - The namespace of the resource provider.
 //   - options - ProvidersClientGetAtTenantScopeOptions contains the optional parameters for the ProvidersClient.GetAtTenantScope
 //     method.
-func (client *ProvidersClient) GetAtTenantScope(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientGetAtTenantScopeOptions) (ProvidersClientGetAtTenantScopeResponse, error) {
+func (client *ProvidersClient) GetAtTenantScope(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientGetAtTenantScopeOptions) (result ProvidersClientGetAtTenantScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.GetAtTenantScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.getAtTenantScopeCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProvidersClientGetAtTenantScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientGetAtTenantScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientGetAtTenantScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.getAtTenantScopeHandleResponse(resp)
+	result, err = client.getAtTenantScopeHandleResponse(resp)
+	return
 }
 
 // getAtTenantScopeCreateRequest creates the GetAtTenantScope request.
@@ -143,10 +151,10 @@ func (client *ProvidersClient) getAtTenantScopeCreateRequest(ctx context.Context
 }
 
 // getAtTenantScopeHandleResponse handles the GetAtTenantScope response.
-func (client *ProvidersClient) getAtTenantScopeHandleResponse(resp *http.Response) (ProvidersClientGetAtTenantScopeResponse, error) {
-	result := ProvidersClientGetAtTenantScopeResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
-		return ProvidersClientGetAtTenantScopeResponse{}, err
+func (client *ProvidersClient) getAtTenantScopeHandleResponse(resp *http.Response) (result ProvidersClientGetAtTenantScopeResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
+		result = ProvidersClientGetAtTenantScopeResponse{}
+		return
 	}
 	return result, nil
 }
@@ -160,25 +168,28 @@ func (client *ProvidersClient) NewListPager(options *ProvidersClientListOptions)
 		More: func(page ProvidersClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *ProvidersClientListResponse) (ProvidersClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *ProvidersClientListResponse) (result ProvidersClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[ProvidersClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return ProvidersClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return ProvidersClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return ProvidersClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -205,10 +216,10 @@ func (client *ProvidersClient) listCreateRequest(ctx context.Context, options *P
 }
 
 // listHandleResponse handles the List response.
-func (client *ProvidersClient) listHandleResponse(resp *http.Response) (ProvidersClientListResponse, error) {
-	result := ProvidersClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ProviderListResult); err != nil {
-		return ProvidersClientListResponse{}, err
+func (client *ProvidersClient) listHandleResponse(resp *http.Response) (result ProvidersClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ProviderListResult); err != nil {
+		result = ProvidersClientListResponse{}
+		return
 	}
 	return result, nil
 }
@@ -223,25 +234,28 @@ func (client *ProvidersClient) NewListAtTenantScopePager(options *ProvidersClien
 		More: func(page ProvidersClientListAtTenantScopeResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *ProvidersClientListAtTenantScopeResponse) (ProvidersClientListAtTenantScopeResponse, error) {
+		Fetcher: func(ctx context.Context, page *ProvidersClientListAtTenantScopeResponse) (result ProvidersClientListAtTenantScopeResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[ProvidersClientListAtTenantScopeResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listAtTenantScopeCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return ProvidersClientListAtTenantScopeResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return ProvidersClientListAtTenantScopeResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return ProvidersClientListAtTenantScopeResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listAtTenantScopeHandleResponse(resp)
+			result, err = client.listAtTenantScopeHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -264,10 +278,10 @@ func (client *ProvidersClient) listAtTenantScopeCreateRequest(ctx context.Contex
 }
 
 // listAtTenantScopeHandleResponse handles the ListAtTenantScope response.
-func (client *ProvidersClient) listAtTenantScopeHandleResponse(resp *http.Response) (ProvidersClientListAtTenantScopeResponse, error) {
-	result := ProvidersClientListAtTenantScopeResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ProviderListResult); err != nil {
-		return ProvidersClientListAtTenantScopeResponse{}, err
+func (client *ProvidersClient) listAtTenantScopeHandleResponse(resp *http.Response) (result ProvidersClientListAtTenantScopeResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ProviderListResult); err != nil {
+		result = ProvidersClientListAtTenantScopeResponse{}
+		return
 	}
 	return result, nil
 }
@@ -279,19 +293,23 @@ func (client *ProvidersClient) listAtTenantScopeHandleResponse(resp *http.Respon
 //   - resourceProviderNamespace - The namespace of the resource provider.
 //   - options - ProvidersClientProviderPermissionsOptions contains the optional parameters for the ProvidersClient.ProviderPermissions
 //     method.
-func (client *ProvidersClient) ProviderPermissions(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientProviderPermissionsOptions) (ProvidersClientProviderPermissionsResponse, error) {
+func (client *ProvidersClient) ProviderPermissions(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientProviderPermissionsOptions) (result ProvidersClientProviderPermissionsResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.ProviderPermissions", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.providerPermissionsCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProvidersClientProviderPermissionsResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientProviderPermissionsResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientProviderPermissionsResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.providerPermissionsHandleResponse(resp)
+	result, err = client.providerPermissionsHandleResponse(resp)
+	return
 }
 
 // providerPermissionsCreateRequest creates the ProviderPermissions request.
@@ -317,10 +335,10 @@ func (client *ProvidersClient) providerPermissionsCreateRequest(ctx context.Cont
 }
 
 // providerPermissionsHandleResponse handles the ProviderPermissions response.
-func (client *ProvidersClient) providerPermissionsHandleResponse(resp *http.Response) (ProvidersClientProviderPermissionsResponse, error) {
-	result := ProvidersClientProviderPermissionsResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ProviderPermissionListResult); err != nil {
-		return ProvidersClientProviderPermissionsResponse{}, err
+func (client *ProvidersClient) providerPermissionsHandleResponse(resp *http.Response) (result ProvidersClientProviderPermissionsResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ProviderPermissionListResult); err != nil {
+		result = ProvidersClientProviderPermissionsResponse{}
+		return
 	}
 	return result, nil
 }
@@ -331,19 +349,23 @@ func (client *ProvidersClient) providerPermissionsHandleResponse(resp *http.Resp
 // Generated from API version 2021-04-01
 //   - resourceProviderNamespace - The namespace of the resource provider to register.
 //   - options - ProvidersClientRegisterOptions contains the optional parameters for the ProvidersClient.Register method.
-func (client *ProvidersClient) Register(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientRegisterOptions) (ProvidersClientRegisterResponse, error) {
+func (client *ProvidersClient) Register(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientRegisterOptions) (result ProvidersClientRegisterResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.Register", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.registerCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProvidersClientRegisterResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientRegisterResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientRegisterResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.registerHandleResponse(resp)
+	result, err = client.registerHandleResponse(resp)
+	return
 }
 
 // registerCreateRequest creates the Register request.
@@ -372,10 +394,10 @@ func (client *ProvidersClient) registerCreateRequest(ctx context.Context, resour
 }
 
 // registerHandleResponse handles the Register response.
-func (client *ProvidersClient) registerHandleResponse(resp *http.Response) (ProvidersClientRegisterResponse, error) {
-	result := ProvidersClientRegisterResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
-		return ProvidersClientRegisterResponse{}, err
+func (client *ProvidersClient) registerHandleResponse(resp *http.Response) (result ProvidersClientRegisterResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
+		result = ProvidersClientRegisterResponse{}
+		return
 	}
 	return result, nil
 }
@@ -388,19 +410,22 @@ func (client *ProvidersClient) registerHandleResponse(resp *http.Response) (Prov
 //   - groupID - The management group ID.
 //   - options - ProvidersClientRegisterAtManagementGroupScopeOptions contains the optional parameters for the ProvidersClient.RegisterAtManagementGroupScope
 //     method.
-func (client *ProvidersClient) RegisterAtManagementGroupScope(ctx context.Context, resourceProviderNamespace string, groupID string, options *ProvidersClientRegisterAtManagementGroupScopeOptions) (ProvidersClientRegisterAtManagementGroupScopeResponse, error) {
+func (client *ProvidersClient) RegisterAtManagementGroupScope(ctx context.Context, resourceProviderNamespace string, groupID string, options *ProvidersClientRegisterAtManagementGroupScopeOptions) (result ProvidersClientRegisterAtManagementGroupScopeResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.RegisterAtManagementGroupScope", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.registerAtManagementGroupScopeCreateRequest(ctx, resourceProviderNamespace, groupID, options)
 	if err != nil {
-		return ProvidersClientRegisterAtManagementGroupScopeResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientRegisterAtManagementGroupScopeResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientRegisterAtManagementGroupScopeResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return ProvidersClientRegisterAtManagementGroupScopeResponse{}, nil
+	return
 }
 
 // registerAtManagementGroupScopeCreateRequest creates the RegisterAtManagementGroupScope request.
@@ -431,19 +456,23 @@ func (client *ProvidersClient) registerAtManagementGroupScopeCreateRequest(ctx c
 // Generated from API version 2021-04-01
 //   - resourceProviderNamespace - The namespace of the resource provider to unregister.
 //   - options - ProvidersClientUnregisterOptions contains the optional parameters for the ProvidersClient.Unregister method.
-func (client *ProvidersClient) Unregister(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientUnregisterOptions) (ProvidersClientUnregisterResponse, error) {
+func (client *ProvidersClient) Unregister(ctx context.Context, resourceProviderNamespace string, options *ProvidersClientUnregisterOptions) (result ProvidersClientUnregisterResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ProvidersClient.Unregister", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.unregisterCreateRequest(ctx, resourceProviderNamespace, options)
 	if err != nil {
-		return ProvidersClientUnregisterResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ProvidersClientUnregisterResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ProvidersClientUnregisterResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.unregisterHandleResponse(resp)
+	result, err = client.unregisterHandleResponse(resp)
+	return
 }
 
 // unregisterCreateRequest creates the Unregister request.
@@ -469,10 +498,10 @@ func (client *ProvidersClient) unregisterCreateRequest(ctx context.Context, reso
 }
 
 // unregisterHandleResponse handles the Unregister response.
-func (client *ProvidersClient) unregisterHandleResponse(resp *http.Response) (ProvidersClientUnregisterResponse, error) {
-	result := ProvidersClientUnregisterResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
-		return ProvidersClientUnregisterResponse{}, err
+func (client *ProvidersClient) unregisterHandleResponse(resp *http.Response) (result ProvidersClientUnregisterResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.Provider); err != nil {
+		result = ProvidersClientUnregisterResponse{}
+		return
 	}
 	return result, nil
 }

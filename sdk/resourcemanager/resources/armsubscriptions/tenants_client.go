@@ -28,7 +28,7 @@ type TenantsClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewTenantsClient(credential azcore.TokenCredential, options *arm.ClientOptions) (*TenantsClient, error) {
-	cl, err := arm.NewClient(moduleName+".TenantsClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armsubscriptions.TenantsClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -47,25 +47,28 @@ func (client *TenantsClient) NewListPager(options *TenantsClientListOptions) *ru
 		More: func(page TenantsClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *TenantsClientListResponse) (TenantsClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *TenantsClientListResponse) (result TenantsClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[TenantsClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return TenantsClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return TenantsClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return TenantsClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -85,10 +88,10 @@ func (client *TenantsClient) listCreateRequest(ctx context.Context, options *Ten
 }
 
 // listHandleResponse handles the List response.
-func (client *TenantsClient) listHandleResponse(resp *http.Response) (TenantsClientListResponse, error) {
-	result := TenantsClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.TenantListResult); err != nil {
-		return TenantsClientListResponse{}, err
+func (client *TenantsClient) listHandleResponse(resp *http.Response) (result TenantsClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.TenantListResult); err != nil {
+		result = TenantsClientListResponse{}
+		return
 	}
 	return result, nil
 }

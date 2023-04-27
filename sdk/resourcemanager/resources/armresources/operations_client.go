@@ -28,7 +28,7 @@ type OperationsClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewOperationsClient(credential azcore.TokenCredential, options *arm.ClientOptions) (*OperationsClient, error) {
-	cl, err := arm.NewClient(moduleName+".OperationsClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armresources.OperationsClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -47,25 +47,28 @@ func (client *OperationsClient) NewListPager(options *OperationsClientListOption
 		More: func(page OperationsClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *OperationsClientListResponse) (OperationsClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *OperationsClientListResponse) (result OperationsClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[OperationsClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return OperationsClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return OperationsClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return OperationsClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -85,10 +88,10 @@ func (client *OperationsClient) listCreateRequest(ctx context.Context, options *
 }
 
 // listHandleResponse handles the List response.
-func (client *OperationsClient) listHandleResponse(resp *http.Response) (OperationsClientListResponse, error) {
-	result := OperationsClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.OperationListResult); err != nil {
-		return OperationsClientListResponse{}, err
+func (client *OperationsClient) listHandleResponse(resp *http.Response) (result OperationsClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.OperationListResult); err != nil {
+		result = OperationsClientListResponse{}
+		return
 	}
 	return result, nil
 }

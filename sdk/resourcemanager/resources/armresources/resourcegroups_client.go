@@ -34,7 +34,7 @@ type ResourceGroupsClient struct {
 //   - credential - used to authorize requests. Usually a credential from azidentity.
 //   - options - pass nil to accept the default values.
 func NewResourceGroupsClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*ResourceGroupsClient, error) {
-	cl, err := arm.NewClient(moduleName+".ResourceGroupsClient", moduleVersion, credential, options)
+	cl, err := arm.NewClient("armresources.ResourceGroupsClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
@@ -51,19 +51,23 @@ func NewResourceGroupsClient(subscriptionID string, credential azcore.TokenCrede
 //   - resourceGroupName - The name of the resource group to check. The name is case insensitive.
 //   - options - ResourceGroupsClientCheckExistenceOptions contains the optional parameters for the ResourceGroupsClient.CheckExistence
 //     method.
-func (client *ResourceGroupsClient) CheckExistence(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientCheckExistenceOptions) (ResourceGroupsClientCheckExistenceResponse, error) {
+func (client *ResourceGroupsClient) CheckExistence(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientCheckExistenceOptions) (result ResourceGroupsClientCheckExistenceResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.CheckExistence", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.checkExistenceCreateRequest(ctx, resourceGroupName, options)
 	if err != nil {
-		return ResourceGroupsClientCheckExistenceResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ResourceGroupsClientCheckExistenceResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusNoContent, http.StatusNotFound) {
-		return ResourceGroupsClientCheckExistenceResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return ResourceGroupsClientCheckExistenceResponse{Success: resp.StatusCode >= 200 && resp.StatusCode < 300}, nil
+	result.Success = resp.StatusCode >= 200 && resp.StatusCode < 300
+	return
 }
 
 // checkExistenceCreateRequest creates the CheckExistence request.
@@ -97,19 +101,23 @@ func (client *ResourceGroupsClient) checkExistenceCreateRequest(ctx context.Cont
 //   - parameters - Parameters supplied to the create or update a resource group.
 //   - options - ResourceGroupsClientCreateOrUpdateOptions contains the optional parameters for the ResourceGroupsClient.CreateOrUpdate
 //     method.
-func (client *ResourceGroupsClient) CreateOrUpdate(ctx context.Context, resourceGroupName string, parameters ResourceGroup, options *ResourceGroupsClientCreateOrUpdateOptions) (ResourceGroupsClientCreateOrUpdateResponse, error) {
+func (client *ResourceGroupsClient) CreateOrUpdate(ctx context.Context, resourceGroupName string, parameters ResourceGroup, options *ResourceGroupsClientCreateOrUpdateOptions) (result ResourceGroupsClientCreateOrUpdateResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.CreateOrUpdate", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.createOrUpdateCreateRequest(ctx, resourceGroupName, parameters, options)
 	if err != nil {
-		return ResourceGroupsClientCreateOrUpdateResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ResourceGroupsClientCreateOrUpdateResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusCreated) {
-		return ResourceGroupsClientCreateOrUpdateResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.createOrUpdateHandleResponse(resp)
+	result, err = client.createOrUpdateHandleResponse(resp)
+	return
 }
 
 // createOrUpdateCreateRequest creates the CreateOrUpdate request.
@@ -135,10 +143,10 @@ func (client *ResourceGroupsClient) createOrUpdateCreateRequest(ctx context.Cont
 }
 
 // createOrUpdateHandleResponse handles the CreateOrUpdate response.
-func (client *ResourceGroupsClient) createOrUpdateHandleResponse(resp *http.Response) (ResourceGroupsClientCreateOrUpdateResponse, error) {
-	result := ResourceGroupsClientCreateOrUpdateResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
-		return ResourceGroupsClientCreateOrUpdateResponse{}, err
+func (client *ResourceGroupsClient) createOrUpdateHandleResponse(resp *http.Response) (result ResourceGroupsClientCreateOrUpdateResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
+		result = ResourceGroupsClientCreateOrUpdateResponse{}
+		return
 	}
 	return result, nil
 }
@@ -151,16 +159,24 @@ func (client *ResourceGroupsClient) createOrUpdateHandleResponse(resp *http.Resp
 //   - resourceGroupName - The name of the resource group to delete. The name is case insensitive.
 //   - options - ResourceGroupsClientBeginDeleteOptions contains the optional parameters for the ResourceGroupsClient.BeginDelete
 //     method.
-func (client *ResourceGroupsClient) BeginDelete(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientBeginDeleteOptions) (*runtime.Poller[ResourceGroupsClientDeleteResponse], error) {
+func (client *ResourceGroupsClient) BeginDelete(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientBeginDeleteOptions) (result *runtime.Poller[ResourceGroupsClientDeleteResponse], err error) {
 	if options == nil || options.ResumeToken == "" {
-		resp, err := client.deleteOperation(ctx, resourceGroupName, options)
+		ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.BeginDelete", client.internal.Tracer(), nil)
+		defer func() { endSpan(err) }()
+		var resp *http.Response
+		resp, err = client.deleteOperation(ctx, resourceGroupName, options)
 		if err != nil {
-			return nil, err
+			return
 		}
-		return runtime.NewPoller[ResourceGroupsClientDeleteResponse](resp, client.internal.Pipeline(), nil)
+		result, err = runtime.NewPoller(resp, client.internal.Pipeline(), &runtime.NewPollerOptions[ResourceGroupsClientDeleteResponse]{
+			Tracer: client.internal.Tracer(),
+		})
 	} else {
-		return runtime.NewPollerFromResumeToken[ResourceGroupsClientDeleteResponse](options.ResumeToken, client.internal.Pipeline(), nil)
+		result, err = runtime.NewPollerFromResumeToken(options.ResumeToken, client.internal.Pipeline(), &runtime.NewPollerFromResumeTokenOptions[ResourceGroupsClientDeleteResponse]{
+			Tracer: client.internal.Tracer(),
+		})
 	}
+	return
 }
 
 // Delete - When you delete a resource group, all of its resources are also deleted. Deleting a resource group deletes all
@@ -168,19 +184,20 @@ func (client *ResourceGroupsClient) BeginDelete(ctx context.Context, resourceGro
 // If the operation fails it returns an *azcore.ResponseError type.
 //
 // Generated from API version 2021-04-01
-func (client *ResourceGroupsClient) deleteOperation(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientBeginDeleteOptions) (*http.Response, error) {
+func (client *ResourceGroupsClient) deleteOperation(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientBeginDeleteOptions) (resp *http.Response, err error) {
 	req, err := client.deleteCreateRequest(ctx, resourceGroupName, options)
 	if err != nil {
-		return nil, err
+		return
 	}
-	resp, err := client.internal.Pipeline().Do(req)
+	resp, err = client.internal.Pipeline().Do(req)
 	if err != nil {
-		return nil, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusAccepted) {
-		return nil, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return resp, nil
+	return
 }
 
 // deleteCreateRequest creates the Delete request.
@@ -216,37 +233,45 @@ func (client *ResourceGroupsClient) deleteCreateRequest(ctx context.Context, res
 //   - parameters - Parameters for exporting the template.
 //   - options - ResourceGroupsClientBeginExportTemplateOptions contains the optional parameters for the ResourceGroupsClient.BeginExportTemplate
 //     method.
-func (client *ResourceGroupsClient) BeginExportTemplate(ctx context.Context, resourceGroupName string, parameters ExportTemplateRequest, options *ResourceGroupsClientBeginExportTemplateOptions) (*runtime.Poller[ResourceGroupsClientExportTemplateResponse], error) {
+func (client *ResourceGroupsClient) BeginExportTemplate(ctx context.Context, resourceGroupName string, parameters ExportTemplateRequest, options *ResourceGroupsClientBeginExportTemplateOptions) (result *runtime.Poller[ResourceGroupsClientExportTemplateResponse], err error) {
 	if options == nil || options.ResumeToken == "" {
-		resp, err := client.exportTemplate(ctx, resourceGroupName, parameters, options)
+		ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.BeginExportTemplate", client.internal.Tracer(), nil)
+		defer func() { endSpan(err) }()
+		var resp *http.Response
+		resp, err = client.exportTemplate(ctx, resourceGroupName, parameters, options)
 		if err != nil {
-			return nil, err
+			return
 		}
-		return runtime.NewPoller(resp, client.internal.Pipeline(), &runtime.NewPollerOptions[ResourceGroupsClientExportTemplateResponse]{
+		result, err = runtime.NewPoller(resp, client.internal.Pipeline(), &runtime.NewPollerOptions[ResourceGroupsClientExportTemplateResponse]{
+			Tracer:        client.internal.Tracer(),
 			FinalStateVia: runtime.FinalStateViaLocation,
 		})
 	} else {
-		return runtime.NewPollerFromResumeToken[ResourceGroupsClientExportTemplateResponse](options.ResumeToken, client.internal.Pipeline(), nil)
+		result, err = runtime.NewPollerFromResumeToken(options.ResumeToken, client.internal.Pipeline(), &runtime.NewPollerFromResumeTokenOptions[ResourceGroupsClientExportTemplateResponse]{
+			Tracer: client.internal.Tracer(),
+		})
 	}
+	return
 }
 
 // ExportTemplate - Captures the specified resource group as a template.
 // If the operation fails it returns an *azcore.ResponseError type.
 //
 // Generated from API version 2021-04-01
-func (client *ResourceGroupsClient) exportTemplate(ctx context.Context, resourceGroupName string, parameters ExportTemplateRequest, options *ResourceGroupsClientBeginExportTemplateOptions) (*http.Response, error) {
+func (client *ResourceGroupsClient) exportTemplate(ctx context.Context, resourceGroupName string, parameters ExportTemplateRequest, options *ResourceGroupsClientBeginExportTemplateOptions) (resp *http.Response, err error) {
 	req, err := client.exportTemplateCreateRequest(ctx, resourceGroupName, parameters, options)
 	if err != nil {
-		return nil, err
+		return
 	}
-	resp, err := client.internal.Pipeline().Do(req)
+	resp, err = client.internal.Pipeline().Do(req)
 	if err != nil {
-		return nil, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK, http.StatusAccepted) {
-		return nil, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return resp, nil
+	return
 }
 
 // exportTemplateCreateRequest creates the ExportTemplate request.
@@ -277,19 +302,23 @@ func (client *ResourceGroupsClient) exportTemplateCreateRequest(ctx context.Cont
 // Generated from API version 2021-04-01
 //   - resourceGroupName - The name of the resource group to get. The name is case insensitive.
 //   - options - ResourceGroupsClientGetOptions contains the optional parameters for the ResourceGroupsClient.Get method.
-func (client *ResourceGroupsClient) Get(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientGetOptions) (ResourceGroupsClientGetResponse, error) {
+func (client *ResourceGroupsClient) Get(ctx context.Context, resourceGroupName string, options *ResourceGroupsClientGetOptions) (result ResourceGroupsClientGetResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.Get", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.getCreateRequest(ctx, resourceGroupName, options)
 	if err != nil {
-		return ResourceGroupsClientGetResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ResourceGroupsClientGetResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ResourceGroupsClientGetResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.getHandleResponse(resp)
+	result, err = client.getHandleResponse(resp)
+	return
 }
 
 // getCreateRequest creates the Get request.
@@ -315,10 +344,10 @@ func (client *ResourceGroupsClient) getCreateRequest(ctx context.Context, resour
 }
 
 // getHandleResponse handles the Get response.
-func (client *ResourceGroupsClient) getHandleResponse(resp *http.Response) (ResourceGroupsClientGetResponse, error) {
-	result := ResourceGroupsClientGetResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
-		return ResourceGroupsClientGetResponse{}, err
+func (client *ResourceGroupsClient) getHandleResponse(resp *http.Response) (result ResourceGroupsClientGetResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
+		result = ResourceGroupsClientGetResponse{}
+		return
 	}
 	return result, nil
 }
@@ -332,25 +361,28 @@ func (client *ResourceGroupsClient) NewListPager(options *ResourceGroupsClientLi
 		More: func(page ResourceGroupsClientListResponse) bool {
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
-		Fetcher: func(ctx context.Context, page *ResourceGroupsClientListResponse) (ResourceGroupsClientListResponse, error) {
+		Fetcher: func(ctx context.Context, page *ResourceGroupsClientListResponse) (result ResourceGroupsClientListResponse, err error) {
+			ctx, endSpan := runtime.StartSpan(ctx, "runtime.Pager[ResourceGroupsClientListResponse].NextPage", client.internal.Tracer(), nil)
+			defer func() { endSpan(err) }()
 			var req *policy.Request
-			var err error
 			if page == nil {
 				req, err = client.listCreateRequest(ctx, options)
 			} else {
 				req, err = runtime.NewRequest(ctx, http.MethodGet, *page.NextLink)
 			}
 			if err != nil {
-				return ResourceGroupsClientListResponse{}, err
+				return
 			}
 			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
-				return ResourceGroupsClientListResponse{}, err
+				return
 			}
 			if !runtime.HasStatusCode(resp, http.StatusOK) {
-				return ResourceGroupsClientListResponse{}, runtime.NewResponseError(resp)
+				err = runtime.NewResponseError(resp)
+				return
 			}
-			return client.listHandleResponse(resp)
+			result, err = client.listHandleResponse(resp)
+			return
 		},
 	})
 }
@@ -380,10 +412,10 @@ func (client *ResourceGroupsClient) listCreateRequest(ctx context.Context, optio
 }
 
 // listHandleResponse handles the List response.
-func (client *ResourceGroupsClient) listHandleResponse(resp *http.Response) (ResourceGroupsClientListResponse, error) {
-	result := ResourceGroupsClientListResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGroupListResult); err != nil {
-		return ResourceGroupsClientListResponse{}, err
+func (client *ResourceGroupsClient) listHandleResponse(resp *http.Response) (result ResourceGroupsClientListResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ResourceGroupListResult); err != nil {
+		result = ResourceGroupsClientListResponse{}
+		return
 	}
 	return result, nil
 }
@@ -397,19 +429,23 @@ func (client *ResourceGroupsClient) listHandleResponse(resp *http.Response) (Res
 //   - resourceGroupName - The name of the resource group to update. The name is case insensitive.
 //   - parameters - Parameters supplied to update a resource group.
 //   - options - ResourceGroupsClientUpdateOptions contains the optional parameters for the ResourceGroupsClient.Update method.
-func (client *ResourceGroupsClient) Update(ctx context.Context, resourceGroupName string, parameters ResourceGroupPatchable, options *ResourceGroupsClientUpdateOptions) (ResourceGroupsClientUpdateResponse, error) {
+func (client *ResourceGroupsClient) Update(ctx context.Context, resourceGroupName string, parameters ResourceGroupPatchable, options *ResourceGroupsClientUpdateOptions) (result ResourceGroupsClientUpdateResponse, err error) {
+	ctx, endSpan := runtime.StartSpan(ctx, "ResourceGroupsClient.Update", client.internal.Tracer(), nil)
+	defer func() { endSpan(err) }()
 	req, err := client.updateCreateRequest(ctx, resourceGroupName, parameters, options)
 	if err != nil {
-		return ResourceGroupsClientUpdateResponse{}, err
+		return
 	}
 	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
-		return ResourceGroupsClientUpdateResponse{}, err
+		return
 	}
 	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return ResourceGroupsClientUpdateResponse{}, runtime.NewResponseError(resp)
+		err = runtime.NewResponseError(resp)
+		return
 	}
-	return client.updateHandleResponse(resp)
+	result, err = client.updateHandleResponse(resp)
+	return
 }
 
 // updateCreateRequest creates the Update request.
@@ -435,10 +471,10 @@ func (client *ResourceGroupsClient) updateCreateRequest(ctx context.Context, res
 }
 
 // updateHandleResponse handles the Update response.
-func (client *ResourceGroupsClient) updateHandleResponse(resp *http.Response) (ResourceGroupsClientUpdateResponse, error) {
-	result := ResourceGroupsClientUpdateResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
-		return ResourceGroupsClientUpdateResponse{}, err
+func (client *ResourceGroupsClient) updateHandleResponse(resp *http.Response) (result ResourceGroupsClientUpdateResponse, err error) {
+	if err = runtime.UnmarshalAsJSON(resp, &result.ResourceGroup); err != nil {
+		result = ResourceGroupsClientUpdateResponse{}
+		return
 	}
 	return result, nil
 }

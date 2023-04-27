@@ -64,6 +64,7 @@ type ClientGetOptions struct {
 
 // ClientListLocationsOptions contains the optional parameters for the Client.NewListLocationsPager method.
 type ClientListLocationsOptions struct {
+<<<<<<<< HEAD:profile/p20200901/resourcemanager/resources/armsubscriptions/models.go
 	// placeholder for future optional parameters
 }
 
@@ -72,6 +73,17 @@ type ClientListOptions struct {
 	// placeholder for future optional parameters
 }
 
+========
+	// Whether to include extended locations.
+	IncludeExtendedLocations *bool
+}
+
+// ClientListOptions contains the optional parameters for the Client.NewListPager method.
+type ClientListOptions struct {
+	// placeholder for future optional parameters
+}
+
+>>>>>>>> 2419f8da89 (wip):sdk/resourcemanager/resources/armsubscriptions/models.go
 // ErrorAdditionalInfo - The resource management error additional info.
 type ErrorAdditionalInfo struct {
 	// READ-ONLY; The additional info.

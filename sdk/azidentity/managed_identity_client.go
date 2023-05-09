@@ -114,6 +114,15 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 		options = &ManagedIdentityCredentialOptions{}
 	}
 	cp := options.ClientOptions
+	//cp.Logging.BodyFilters = append(cp.Logging.BodyFilters, DefaultLogBodyFilters...)
+	if cp.Logging.BodyFilter != nil {
+		cp.Logging.BodyFilter = func(s string) string {
+			s = DefaultLogBodyFilter(s)
+			return cp.Logging.BodyFilter(s)
+		}
+	} else {
+		cp.Logging.BodyFilter = DefaultLogBodyFilter
+	}
 	c := managedIdentityClient{id: options.ID, endpoint: imdsEndpoint, msiType: msiTypeIMDS}
 	env := "IMDS"
 	if endpoint, ok := os.LookupEnv(identityEndpoint); ok {

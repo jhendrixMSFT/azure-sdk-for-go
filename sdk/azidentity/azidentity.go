@@ -131,7 +131,20 @@ func validTenantID(tenantID string) bool {
 }
 
 func newPipelineAdapter(opts *azcore.ClientOptions) pipelineAdapter {
-	pl := runtime.NewPipeline(component, version, runtime.PipelineOptions{}, opts)
+	if opts == nil {
+		opts = &azcore.ClientOptions{}
+	}
+	cp := *opts
+	//cp.Logging.BodyFilters = append(cp.Logging.BodyFilters, DefaultLogBodyFilters...)
+	if cp.Logging.BodyFilter != nil {
+		cp.Logging.BodyFilter = func(s string) string {
+			s = DefaultLogBodyFilter(s)
+			return cp.Logging.BodyFilter(s)
+		}
+	} else {
+		cp.Logging.BodyFilter = DefaultLogBodyFilter
+	}
+	pl := runtime.NewPipeline(component, version, runtime.PipelineOptions{}, &cp)
 	return pipelineAdapter{pl: pl}
 }
 

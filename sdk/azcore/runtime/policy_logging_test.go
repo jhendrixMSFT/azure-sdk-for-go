@@ -213,12 +213,12 @@ func TestSkipWriteReqBody(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := bytes.Buffer{}
-	require.NoError(t, writeReqBody(req, &buf))
+	require.NoError(t, writeReqBody(req, &buf, nil))
 	require.Contains(t, buf.String(), "Request contained no body")
 	buf.Reset()
 
 	require.NoError(t, req.SetBody(exported.NopCloser(bytes.NewReader([]byte{0xf0, 0x0d})), "application/octet-stream"))
-	require.NoError(t, writeReqBody(req, &buf))
+	require.NoError(t, writeReqBody(req, &buf, nil))
 	require.Contains(t, buf.String(), "Skip logging body for application/octet-stream")
 }
 
@@ -228,8 +228,12 @@ func TestWriteReqBody(t *testing.T) {
 	require.NoError(t, req.SetBody(exported.NopCloser(strings.NewReader(`{"foo":"bar"}`)), shared.ContentTypeAppJSON))
 
 	buf := bytes.Buffer{}
-	require.NoError(t, writeReqBody(req, &buf))
-	require.Contains(t, buf.String(), `{"foo":"bar"}`)
+	require.NoError(t, writeReqBody(req, &buf, []func(string) string{
+		func(s string) string {
+			return strings.Replace(s, "bar", "baz", -1)
+		},
+	}))
+	require.Contains(t, buf.String(), `{"foo":"baz"}`)
 }
 
 type readSeekerFailer struct {
@@ -260,31 +264,35 @@ func TestWriteReqBodyReadError(t *testing.T) {
 
 	buf := bytes.Buffer{}
 	rsf.failRead = true
-	require.Error(t, writeReqBody(req, &buf))
+	require.Error(t, writeReqBody(req, &buf, nil))
 	require.Contains(t, buf.String(), "Failed to read request body: read failed")
 
 	buf.Reset()
 	rsf.failRead = false
 	rsf.failSeek = true
-	require.Error(t, writeReqBody(req, &buf))
+	require.Error(t, writeReqBody(req, &buf, nil))
 	require.Zero(t, buf.Len())
 }
 
 func TestSkipWriteRespBody(t *testing.T) {
 	resp := &http.Response{Header: http.Header{}}
 	buf := bytes.Buffer{}
-	require.NoError(t, writeRespBody(resp, &buf))
+	require.NoError(t, writeRespBody(resp, &buf, nil))
 	require.Contains(t, buf.String(), "Response contained no body")
 
 	resp.Header.Set(shared.HeaderContentType, "application/octet-stream")
 	buf.Reset()
-	require.NoError(t, writeRespBody(resp, &buf))
+	require.NoError(t, writeRespBody(resp, &buf, []func(string) string{
+		func(s string) string {
+			return strings.Replace(s, "no", "effect", -1)
+		},
+	}))
 	require.Contains(t, buf.String(), "Skip logging body for application/octet-stream")
 
 	resp.Header.Set(shared.HeaderContentType, "application/json")
 	resp.Body = io.NopCloser(strings.NewReader(""))
 	buf.Reset()
-	require.NoError(t, writeRespBody(resp, &buf))
+	require.NoError(t, writeRespBody(resp, &buf, nil))
 	require.Contains(t, buf.String(), "Response contained no body")
 }
 
@@ -294,8 +302,12 @@ func TestWriteRespBody(t *testing.T) {
 
 	resp.Header.Set(shared.HeaderContentType, "application/json")
 	resp.Body = io.NopCloser(strings.NewReader(`{"foo":"bar"}`))
-	require.NoError(t, writeRespBody(resp, &buf))
-	require.Contains(t, buf.String(), `{"foo":"bar"}`)
+	require.NoError(t, writeRespBody(resp, &buf, []func(string) string{
+		func(s string) string {
+			return strings.Replace(s, "bar", "baz", -1)
+		},
+	}))
+	require.Contains(t, buf.String(), `{"foo":"baz"}`)
 }
 
 func TestWriteRespBodyReadError(t *testing.T) {
@@ -304,6 +316,6 @@ func TestWriteRespBodyReadError(t *testing.T) {
 
 	resp.Header.Set(shared.HeaderContentType, "application/json")
 	resp.Body = exported.NopCloser(&readSeekerFailer{failRead: true})
-	require.Error(t, writeRespBody(resp, &buf))
+	require.Error(t, writeRespBody(resp, &buf, nil))
 	require.Contains(t, buf.String(), "Failed to read response body: read failed")
 }

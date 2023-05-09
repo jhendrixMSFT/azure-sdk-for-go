@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.5.0-beta.1
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.2.0
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
@@ -22,3 +22,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/Azure/azure-sdk-for-go/sdk/azcore => ../azcore

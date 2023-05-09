@@ -24,6 +24,7 @@ import (
 
 type logPolicy struct {
 	includeBody    bool
+	bodyFilters    []func(string) string
 	allowedHeaders map[string]struct{}
 	allowedQP      map[string]struct{}
 }
@@ -68,11 +69,17 @@ func NewLogPolicy(o *policy.LogOptions) policy.Policy {
 	}
 	// now do the same thing for query params
 	allowedQP := getAllowedQueryParams(o.AllowedQueryParams)
-	return &logPolicy{
+	policy := &logPolicy{
 		includeBody:    o.IncludeBody,
 		allowedHeaders: allowedHeaders,
 		allowedQP:      allowedQP,
 	}
+
+	if l := len(o.BodyFilters); l > 0 {
+		policy.bodyFilters = make([]func(string) string, l)
+		copy(policy.bodyFilters, o.BodyFilters)
+	}
+	return policy
 }
 
 // getAllowedQueryParams merges the default set of allowed query parameters
@@ -109,7 +116,7 @@ func (p *logPolicy) Do(req *policy.Request) (*http.Response, error) {
 		p.writeRequestWithResponse(b, req, nil, nil)
 		var err error
 		if p.includeBody {
-			err = writeReqBody(req, b)
+			err = writeReqBody(req, b, p.bodyFilters)
 		}
 		log.Write(log.EventRequest, b.String())
 		if err != nil {
@@ -139,7 +146,7 @@ func (p *logPolicy) Do(req *policy.Request) (*http.Response, error) {
 			// skip frames runtime.Callers() and runtime.StackTrace()
 			b.WriteString(diag.StackTrace(2, 32))
 		} else if p.includeBody {
-			err = writeRespBody(response, b)
+			err = writeRespBody(response, b, p.bodyFilters)
 		}
 		log.Write(log.EventResponse, b.String())
 	}
@@ -214,7 +221,7 @@ func shouldLogBody(b *bytes.Buffer, contentType string) bool {
 }
 
 // writes to a buffer, used for logging purposes
-func writeReqBody(req *policy.Request, b *bytes.Buffer) error {
+func writeReqBody(req *policy.Request, b *bytes.Buffer, filters []func(string) string) error {
 	if req.Raw().Body == nil {
 		fmt.Fprint(b, "   Request contained no body\n")
 		return nil
@@ -230,12 +237,12 @@ func writeReqBody(req *policy.Request, b *bytes.Buffer) error {
 	if err := req.RewindBody(); err != nil {
 		return err
 	}
-	logBody(b, body)
+	logBody(b, body, filters)
 	return nil
 }
 
 // writes to a buffer, used for logging purposes
-func writeRespBody(resp *http.Response, b *bytes.Buffer) error {
+func writeRespBody(resp *http.Response, b *bytes.Buffer, filters []func(string) string) error {
 	ct := resp.Header.Get(shared.HeaderContentType)
 	if ct == "" {
 		fmt.Fprint(b, "   Response contained no body\n")
@@ -249,15 +256,18 @@ func writeRespBody(resp *http.Response, b *bytes.Buffer) error {
 		return err
 	}
 	if len(body) > 0 {
-		logBody(b, body)
+		logBody(b, body, filters)
 	} else {
 		fmt.Fprint(b, "   Response contained no body\n")
 	}
 	return nil
 }
 
-func logBody(b *bytes.Buffer, body []byte) {
+func logBody(b *bytes.Buffer, body []byte, filters []func(string) string) {
 	fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
+	for _, filter := range filters {
+		body = []byte(filter(string(body)))
+	}
 	fmt.Fprintln(b, string(body))
 	fmt.Fprintln(b, "   --------------------------------------------------------------------------------")
 }

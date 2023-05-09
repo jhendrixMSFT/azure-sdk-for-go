@@ -64,8 +64,13 @@ type ClientOptions struct {
 type LogOptions struct {
 	// IncludeBody indicates if request and response bodies should be included in logging.
 	// The default value is false.
-	// NOTE: enabling this can lead to disclosure of sensitive information, use with care.
+	// WARNING: enabling this can lead to disclosure of sensitive information, use with care.
 	IncludeBody bool
+
+	// BodyFilters contains callbacks that can be used to filter request and response bodies.
+	// Each filter is executed in succession, passing the result from the previous filter to the next.
+	// When IncludeBody is false this field is ignored.
+	BodyFilter func(string) string
 
 	// AllowedHeaders is the slice of headers to log with their values intact.
 	// All headers not in the slice will have their values REDACTED.

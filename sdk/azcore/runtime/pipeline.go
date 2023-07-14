@@ -82,7 +82,7 @@ func NewPipeline(module, version string, plOpts PipelineOptions, options *policy
 	policies = append(policies, exported.PolicyFunc(bodyDownloadPolicy))
 	transport := cp.Transport
 	if transport == nil {
-		transport = defaultHTTPClient
+		transport = newDefaultTransport()
 	}
 	return exported.NewPipeline(transport, policies...)
 }

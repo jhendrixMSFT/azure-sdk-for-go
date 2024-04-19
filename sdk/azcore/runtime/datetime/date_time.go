@@ -63,19 +63,12 @@ func (d DateTime) MarshalText() ([]byte, error) {
 }
 
 func (d *DateTime) UnmarshalJSON(data []byte) error {
-	if d.fmt == FormatUnix {
-		var err error
-		d.val, err = parseUnix(data)
-		return err
+	if data == nil || string(data) == "null" {
+		// JSON null
+		return nil
 	}
 
-	layout := `"` + getLayout(data, d.fmt) + `"`
-	t, err := time.Parse(layout, strings.ToUpper(string(data)))
-	if err != nil {
-		return err
-	}
-	d.val = t
-	return nil
+	return d.unmarshal(data, `"`+getLayout(data, d.fmt)+`"`)
 }
 
 func (d *DateTime) UnmarshalText(data []byte) error {
@@ -84,13 +77,17 @@ func (d *DateTime) UnmarshalText(data []byte) error {
 		return nil
 	}
 
+	return d.unmarshal(data, getLayout(data, d.fmt))
+}
+
+func (d *DateTime) unmarshal(data []byte, layout string) error {
 	if d.fmt == FormatUnix {
 		var err error
 		d.val, err = parseUnix(data)
 		return err
 	}
 
-	t, err := time.Parse(getLayout(data, d.fmt), string(data))
+	t, err := time.Parse(layout, strings.ToUpper(string(data)))
 	if err != nil {
 		return err
 	}

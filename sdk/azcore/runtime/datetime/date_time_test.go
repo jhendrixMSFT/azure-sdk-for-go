@@ -19,11 +19,11 @@ func TestSliceWithNil(t *testing.T) {
 	time1 := time.Date(2024, 4, 17, 13, 15, 0, 0, time.UTC)
 	time2 := time.Date(2024, 4, 18, 10, 40, 31, 0, time.UTC)
 	src := []*DateTime{
-		to.Ptr(New(FormatRFC3339, true, &Options{
+		to.Ptr(New(FormatRFC3339, &Options{
 			From: time1,
 		})),
 		nil,
-		to.Ptr(New(FormatRFC3339, true, &Options{
+		to.Ptr(New(FormatRFC3339, &Options{
 			From: time2,
 		})),
 	}

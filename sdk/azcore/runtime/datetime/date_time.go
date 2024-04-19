@@ -21,9 +21,10 @@ type Format int
 const (
 	FormatRFC3339  Format = 0
 	FormatRFC1123  Format = 1
-	FormatDateOnly Format = 2
-	FormatTimeOnly Format = 3
-	FormatUnix     Format = 4
+	FormatRFC7231  Format = 2
+	FormatDateOnly Format = 3
+	FormatTimeOnly Format = 4
+	FormatUnix     Format = 5
 )
 
 // DateTime is a [time.Time] with specific formatting.
@@ -31,7 +32,6 @@ const (
 type DateTime struct {
 	val time.Time
 	fmt Format
-	utc bool
 }
 
 // Options contains the optional values for creating a [DateTime].
@@ -42,12 +42,10 @@ type Options struct {
 
 // New creates a new [DateTime].
 //   - format defines the string representation
-//   - isUTC indicates if the time is in UTC/GMT or has a timezone offset
 //   - options contains the optional values
-func New(format Format, isUTC bool, options *Options) DateTime {
+func New(format Format, options *Options) DateTime {
 	dt := DateTime{
 		fmt: format,
-		utc: isUTC,
 	}
 	if options != nil {
 		dt.val = options.From
@@ -71,7 +69,7 @@ func (d *DateTime) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	layout := `"` + getLayout(data, d.fmt, d.utc) + `"`
+	layout := `"` + getLayout(data, d.fmt) + `"`
 	t, err := time.Parse(layout, strings.ToUpper(string(data)))
 	if err != nil {
 		return err
@@ -92,7 +90,7 @@ func (d *DateTime) UnmarshalText(data []byte) error {
 		return err
 	}
 
-	t, err := time.Parse(getLayout(data, d.fmt, d.utc), string(data))
+	t, err := time.Parse(getLayout(data, d.fmt), string(data))
 	if err != nil {
 		return err
 	}
@@ -100,30 +98,19 @@ func (d *DateTime) UnmarshalText(data []byte) error {
 	return nil
 }
 
-// TODO: for tsp plainDate and plainTime formats, they have examples like "April 10th" and "3:00 am" respectively.
-// this is different from Go's time.DateOnly and time.TimeOnly formats.
-// do we need to support them? support both?
-
 // String implements the [fmt.Stringer] interface for [DateTime].
 // It returns the string value based on the specified [Format] and UTC settings.
 func (d DateTime) String() string {
 	switch d.fmt {
 	case FormatDateOnly:
 		return d.val.Format(time.DateOnly)
-		//return fmt.Sprintf("%04d-%02d-%02d", d.val.Year(), d.val.Month(), d.val.Day())
 	case FormatRFC1123:
-		if d.utc {
-			return d.val.Format(http.TimeFormat)
-		}
 		return d.val.Format(time.RFC1123)
+	case FormatRFC7231:
+		return d.val.Format(http.TimeFormat)
 	case FormatTimeOnly:
-		//return fmt.Sprintf("%d:%d:%d", d.val.Hour(), d.val.Minute(), d.val.Second())
 		return d.val.Format(time.TimeOnly)
 	case FormatUnix:
-		/*t := d.val.Unix()
-		if d.utc {
-			t = d.val.UTC().Unix()
-		}*/
 		return fmt.Sprintf("%d", d.val.Unix())
 	default:
 		// default to RFC3339
@@ -145,14 +132,13 @@ const (
 	dateTimeNoT    = `2006-01-02 15:04:05.999999999Z07:00`
 )
 
-func getLayout(data []byte, format Format, isUTC bool) string {
+func getLayout(data []byte, format Format) string {
 	if format == FormatDateOnly {
 		return time.DateOnly
 	} else if format == FormatRFC1123 {
-		if isUTC {
-			return http.TimeFormat
-		}
 		return time.RFC1123
+	} else if format == FormatRFC7231 {
+		return http.TimeFormat
 	} else if format == FormatTimeOnly {
 		return time.TimeOnly
 	}

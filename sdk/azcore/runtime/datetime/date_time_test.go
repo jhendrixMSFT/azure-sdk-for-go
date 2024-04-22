@@ -205,6 +205,20 @@ func TestUnmarshalErrors(t *testing.T) {
 	assert.True(t, dt.Time().IsZero())
 }
 
+func TestParse(t *testing.T) {
+	dt, err := Parse(FormatDateOnly, "2024-07-17")
+	require.NoError(t, err)
+	assert.EqualValues(t, "2024-07-17", dt.String())
+
+	dt, err = Parse(FormatRFC1123, "invalid-time")
+	require.Error(t, err)
+	require.Zero(t, dt.Time())
+}
+
+func TestString(t *testing.T) {
+	require.EqualValues(t, "1721222100", String(FormatUnix, time.Date(2024, 7, 17, 13, 15, 0, 0, time.UTC)))
+}
+
 func TestSliceWithNil(t *testing.T) {
 	time1 := time.Date(2024, 4, 17, 13, 15, 0, 0, time.UTC)
 	time2 := time.Date(2024, 4, 18, 10, 40, 31, 0, time.UTC)

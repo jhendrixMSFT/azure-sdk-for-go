@@ -53,9 +53,27 @@ func New(format Format, options *Options) DateTime {
 	return dt
 }
 
+// String returns the string representation of t in the specified format.
+//   - format defines the string representation
+//   - t is the [time.Time] to convert
+func String(format Format, t time.Time) string {
+	dt := New(format, &Options{From: t})
+	return dt.String()
+}
+
+// Parse creates a new [DateTime] by parsing val.
+//   - format defines the expected format of val
+//   - val is the string value to parse
+func Parse(format Format, val string) (DateTime, error) {
+	dt := New(format, nil)
+	if err := dt.UnmarshalText([]byte(val)); err != nil {
+		return DateTime{}, err
+	}
+	return dt, nil
+}
+
 func (d DateTime) MarshalJSON() ([]byte, error) {
-	b := d.String()
-	return []byte(`"` + b + `"`), nil
+	return []byte(`"` + d.String() + `"`), nil
 }
 
 func (d DateTime) MarshalText() ([]byte, error) {
@@ -82,9 +100,12 @@ func (d *DateTime) UnmarshalText(data []byte) error {
 
 func (d *DateTime) unmarshal(data []byte, layout string) error {
 	if d.fmt == FormatUnix {
-		var err error
-		d.val, err = parseUnix(data)
-		return err
+		sec, err := strconv.ParseInt(string(data), 10, 64)
+		if err != nil {
+			return err
+		}
+		d.val = time.Unix(sec, 0)
+		return nil
 	}
 
 	t, err := time.Parse(layout, strings.ToUpper(string(data)))
@@ -154,12 +175,4 @@ func getLayout(data []byte, format Format) string {
 		layout = utcDateTimeNoT
 	}
 	return layout
-}
-
-func parseUnix(data []byte) (time.Time, error) {
-	sec, err := strconv.ParseInt(string(data), 10, 64)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return time.Unix(sec, 0), nil
 }

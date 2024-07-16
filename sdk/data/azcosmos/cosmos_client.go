@@ -28,7 +28,7 @@ const (
 // Client is used to interact with the Azure Cosmos DB database service.
 type Client struct {
 	endpoint string
-	pipeline azruntime.Pipeline
+	internal *azcore.Client
 	gem      *globalEndpointManager
 }
 
@@ -51,7 +51,11 @@ func NewClientWithKey(endpoint string, cred KeyCredential, o *ClientOptions) (*C
 	if err != nil {
 		return nil, err
 	}
-	return &Client{endpoint: endpoint, pipeline: newPipeline(newSharedKeyCredPolicy(cred), gem, o), gem: gem}, nil
+	internalClient, err := newClient(newSharedKeyCredPolicy(cred), gem, o)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{endpoint: endpoint, internal: internalClient, gem: gem}, nil
 }
 
 // NewClient creates a new instance of Cosmos client with Azure AD access token authentication. It uses the default pipeline configuration.
@@ -72,7 +76,11 @@ func NewClient(endpoint string, cred azcore.TokenCredential, o *ClientOptions) (
 	if err != nil {
 		return nil, err
 	}
-	return &Client{endpoint: endpoint, pipeline: newPipeline(newCosmosBearerTokenPolicy(cred, scope, nil), gem, o), gem: gem}, nil
+	internalClient, err := newClient(newCosmosBearerTokenPolicy(cred, scope, nil), gem, o)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{endpoint: endpoint, internal: internalClient, gem: gem}, nil
 }
 
 // NewClientFromConnectionString creates a new instance of Cosmos client from connection string. It uses the default pipeline configuration.
@@ -111,11 +119,11 @@ func NewClientFromConnectionString(connectionString string, o *ClientOptions) (*
 	return NewClientWithKey(endpoint, cred, o)
 }
 
-func newPipeline(authPolicy policy.Policy, gem *globalEndpointManager, options *ClientOptions) azruntime.Pipeline {
+func newClient(authPolicy policy.Policy, gem *globalEndpointManager, options *ClientOptions) (*azcore.Client, error) {
 	if options == nil {
 		options = &ClientOptions{}
 	}
-	return azruntime.NewPipeline("azcosmos", serviceLibVersion,
+	return azcore.NewClient(moduleName, serviceLibVersion,
 		azruntime.PipelineOptions{
 			AllowedHeaders: getAllowedHeaders(),
 			PerCall: []policy.Policy{
@@ -132,11 +140,12 @@ func newPipeline(authPolicy policy.Policy, gem *globalEndpointManager, options *
 		&options.ClientOptions)
 }
 
+// creates the pipeline used by GEM
 func newInternalPipeline(authPolicy policy.Policy, options *ClientOptions) azruntime.Pipeline {
 	if options == nil {
 		options = &ClientOptions{}
 	}
-	return azruntime.NewPipeline("azcosmos", serviceLibVersion,
+	return azruntime.NewPipeline(moduleName, serviceLibVersion,
 		azruntime.PipelineOptions{
 			AllowedHeaders: getAllowedHeaders(),
 			PerRetry: []policy.Policy{
@@ -473,7 +482,7 @@ func (c *Client) attachContent(content interface{}, req *policy.Request) error {
 
 func (c *Client) executeAndEnsureSuccessResponse(request *policy.Request) (*http.Response, error) {
 	log.Write(azlog.EventResponse, fmt.Sprintf("\n===== Client preferred regions:\n%v\n=====\n", c.gem.preferredLocations))
-	response, err := c.pipeline.Do(request)
+	response, err := c.internal.Pipeline().Do(request)
 	if err != nil {
 		return nil, err
 	}

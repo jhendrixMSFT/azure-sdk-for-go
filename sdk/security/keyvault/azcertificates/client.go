@@ -36,7 +36,9 @@ type Client struct {
 //   - options - BackupCertificateOptions contains the optional parameters for the Client.BackupCertificate method.
 func (client *Client) BackupCertificate(ctx context.Context, certificateName string, options *BackupCertificateOptions) (BackupCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.BackupCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.BackupCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.backupCertificateCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -93,7 +95,9 @@ func (client *Client) backupCertificateHandleResponse(resp *http.Response) (Back
 //   - options - CreateCertificateOptions contains the optional parameters for the Client.CreateCertificate method.
 func (client *Client) CreateCertificate(ctx context.Context, certificateName string, parameters CreateCertificateParameters, options *CreateCertificateOptions) (CreateCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.CreateCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.CreateCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.createCertificateCreateRequest(ctx, certificateName, parameters, options)
 	if err != nil {
@@ -151,7 +155,9 @@ func (client *Client) createCertificateHandleResponse(resp *http.Response) (Crea
 //   - options - DeleteCertificateOptions contains the optional parameters for the Client.DeleteCertificate method.
 func (client *Client) DeleteCertificate(ctx context.Context, certificateName string, options *DeleteCertificateOptions) (DeleteCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.DeleteCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.DeleteCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteCertificateCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -206,7 +212,9 @@ func (client *Client) deleteCertificateHandleResponse(resp *http.Response) (Dele
 //     method.
 func (client *Client) DeleteCertificateOperation(ctx context.Context, certificateName string, options *DeleteCertificateOperationOptions) (DeleteCertificateOperationResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.DeleteCertificateOperation", client.internal.Tracer(), nil)
+	const operationName = "Client.DeleteCertificateOperation"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteCertificateOperationCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -259,7 +267,9 @@ func (client *Client) deleteCertificateOperationHandleResponse(resp *http.Respon
 //   - options - DeleteContactsOptions contains the optional parameters for the Client.DeleteContacts method.
 func (client *Client) DeleteContacts(ctx context.Context, options *DeleteContactsOptions) (DeleteContactsResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.DeleteContacts", client.internal.Tracer(), nil)
+	const operationName = "Client.DeleteContacts"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteContactsCreateRequest(ctx, options)
 	if err != nil {
@@ -309,7 +319,9 @@ func (client *Client) deleteContactsHandleResponse(resp *http.Response) (DeleteC
 //   - options - DeleteIssuerOptions contains the optional parameters for the Client.DeleteIssuer method.
 func (client *Client) DeleteIssuer(ctx context.Context, issuerName string, options *DeleteIssuerOptions) (DeleteIssuerResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.DeleteIssuer", client.internal.Tracer(), nil)
+	const operationName = "Client.DeleteIssuer"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteIssuerCreateRequest(ctx, issuerName, options)
 	if err != nil {
@@ -364,7 +376,9 @@ func (client *Client) deleteIssuerHandleResponse(resp *http.Response) (DeleteIss
 //   - options - GetCertificateOptions contains the optional parameters for the Client.GetCertificate method.
 func (client *Client) GetCertificate(ctx context.Context, certificateName string, certificateVersion string, options *GetCertificateOptions) (GetCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.GetCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getCertificateCreateRequest(ctx, certificateName, certificateVersion, options)
 	if err != nil {
@@ -420,7 +434,9 @@ func (client *Client) getCertificateHandleResponse(resp *http.Response) (GetCert
 //     method.
 func (client *Client) GetCertificateOperation(ctx context.Context, certificateName string, options *GetCertificateOperationOptions) (GetCertificateOperationResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetCertificateOperation", client.internal.Tracer(), nil)
+	const operationName = "Client.GetCertificateOperation"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getCertificateOperationCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -474,7 +490,9 @@ func (client *Client) getCertificateOperationHandleResponse(resp *http.Response)
 //   - options - GetCertificatePolicyOptions contains the optional parameters for the Client.GetCertificatePolicy method.
 func (client *Client) GetCertificatePolicy(ctx context.Context, certificateName string, options *GetCertificatePolicyOptions) (GetCertificatePolicyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetCertificatePolicy", client.internal.Tracer(), nil)
+	const operationName = "Client.GetCertificatePolicy"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getCertificatePolicyCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -527,7 +545,9 @@ func (client *Client) getCertificatePolicyHandleResponse(resp *http.Response) (G
 //   - options - GetContactsOptions contains the optional parameters for the Client.GetContacts method.
 func (client *Client) GetContacts(ctx context.Context, options *GetContactsOptions) (GetContactsResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetContacts", client.internal.Tracer(), nil)
+	const operationName = "Client.GetContacts"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getContactsCreateRequest(ctx, options)
 	if err != nil {
@@ -578,7 +598,9 @@ func (client *Client) getContactsHandleResponse(resp *http.Response) (GetContact
 //   - options - GetDeletedCertificateOptions contains the optional parameters for the Client.GetDeletedCertificate method.
 func (client *Client) GetDeletedCertificate(ctx context.Context, certificateName string, options *GetDeletedCertificateOptions) (GetDeletedCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetDeletedCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.GetDeletedCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getDeletedCertificateCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -632,7 +654,9 @@ func (client *Client) getDeletedCertificateHandleResponse(resp *http.Response) (
 //   - options - GetIssuerOptions contains the optional parameters for the Client.GetIssuer method.
 func (client *Client) GetIssuer(ctx context.Context, issuerName string, options *GetIssuerOptions) (GetIssuerResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetIssuer", client.internal.Tracer(), nil)
+	const operationName = "Client.GetIssuer"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getIssuerCreateRequest(ctx, issuerName, options)
 	if err != nil {
@@ -691,7 +715,9 @@ func (client *Client) getIssuerHandleResponse(resp *http.Response) (GetIssuerRes
 //   - options - ImportCertificateOptions contains the optional parameters for the Client.ImportCertificate method.
 func (client *Client) ImportCertificate(ctx context.Context, certificateName string, parameters ImportCertificateParameters, options *ImportCertificateOptions) (ImportCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.ImportCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.ImportCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.importCertificateCreateRequest(ctx, certificateName, parameters, options)
 	if err != nil {
@@ -751,6 +777,7 @@ func (client *Client) NewListCertificatePropertiesPager(options *ListCertificate
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListCertificatePropertiesResponse) (ListCertificatePropertiesResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListCertificatePropertiesPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -806,6 +833,7 @@ func (client *Client) NewListCertificatePropertiesVersionsPager(certificateName 
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListCertificatePropertiesVersionsResponse) (ListCertificatePropertiesVersionsResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListCertificatePropertiesVersionsPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -863,6 +891,7 @@ func (client *Client) NewListDeletedCertificatePropertiesPager(options *ListDele
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListDeletedCertificatePropertiesResponse) (ListDeletedCertificatePropertiesResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListDeletedCertificatePropertiesPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -917,6 +946,7 @@ func (client *Client) NewListIssuerPropertiesPager(options *ListIssuerProperties
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListIssuerPropertiesResponse) (ListIssuerPropertiesResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListIssuerPropertiesPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -967,7 +997,9 @@ func (client *Client) listIssuerPropertiesHandleResponse(resp *http.Response) (L
 //   - options - MergeCertificateOptions contains the optional parameters for the Client.MergeCertificate method.
 func (client *Client) MergeCertificate(ctx context.Context, certificateName string, parameters MergeCertificateParameters, options *MergeCertificateOptions) (MergeCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.MergeCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.MergeCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.mergeCertificateCreateRequest(ctx, certificateName, parameters, options)
 	if err != nil {
@@ -1026,7 +1058,9 @@ func (client *Client) mergeCertificateHandleResponse(resp *http.Response) (Merge
 //     method.
 func (client *Client) PurgeDeletedCertificate(ctx context.Context, certificateName string, options *PurgeDeletedCertificateOptions) (PurgeDeletedCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.PurgeDeletedCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.PurgeDeletedCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.purgeDeletedCertificateCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -1072,7 +1106,9 @@ func (client *Client) purgeDeletedCertificateCreateRequest(ctx context.Context, 
 //     method.
 func (client *Client) RecoverDeletedCertificate(ctx context.Context, certificateName string, options *RecoverDeletedCertificateOptions) (RecoverDeletedCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.RecoverDeletedCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.RecoverDeletedCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.recoverDeletedCertificateCreateRequest(ctx, certificateName, options)
 	if err != nil {
@@ -1126,7 +1162,9 @@ func (client *Client) recoverDeletedCertificateHandleResponse(resp *http.Respons
 //   - options - RestoreCertificateOptions contains the optional parameters for the Client.RestoreCertificate method.
 func (client *Client) RestoreCertificate(ctx context.Context, parameters RestoreCertificateParameters, options *RestoreCertificateOptions) (RestoreCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.RestoreCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.RestoreCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.restoreCertificateCreateRequest(ctx, parameters, options)
 	if err != nil {
@@ -1179,7 +1217,9 @@ func (client *Client) restoreCertificateHandleResponse(resp *http.Response) (Res
 //   - options - SetContactsOptions contains the optional parameters for the Client.SetContacts method.
 func (client *Client) SetContacts(ctx context.Context, contacts Contacts, options *SetContactsOptions) (SetContactsResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.SetContacts", client.internal.Tracer(), nil)
+	const operationName = "Client.SetContacts"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.setContactsCreateRequest(ctx, contacts, options)
 	if err != nil {
@@ -1234,7 +1274,9 @@ func (client *Client) setContactsHandleResponse(resp *http.Response) (SetContact
 //   - options - SetIssuerOptions contains the optional parameters for the Client.SetIssuer method.
 func (client *Client) SetIssuer(ctx context.Context, issuerName string, parameter SetIssuerParameters, options *SetIssuerOptions) (SetIssuerResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.SetIssuer", client.internal.Tracer(), nil)
+	const operationName = "Client.SetIssuer"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.setIssuerCreateRequest(ctx, issuerName, parameter, options)
 	if err != nil {
@@ -1294,7 +1336,9 @@ func (client *Client) setIssuerHandleResponse(resp *http.Response) (SetIssuerRes
 //   - options - UpdateCertificateOptions contains the optional parameters for the Client.UpdateCertificate method.
 func (client *Client) UpdateCertificate(ctx context.Context, certificateName string, certificateVersion string, parameters UpdateCertificateParameters, options *UpdateCertificateOptions) (UpdateCertificateResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateCertificate", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateCertificate"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateCertificateCreateRequest(ctx, certificateName, certificateVersion, parameters, options)
 	if err != nil {
@@ -1354,7 +1398,9 @@ func (client *Client) updateCertificateHandleResponse(resp *http.Response) (Upda
 //     method.
 func (client *Client) UpdateCertificateOperation(ctx context.Context, certificateName string, certificateOperation UpdateCertificateOperationParameter, options *UpdateCertificateOperationOptions) (UpdateCertificateOperationResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateCertificateOperation", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateCertificateOperation"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateCertificateOperationCreateRequest(ctx, certificateName, certificateOperation, options)
 	if err != nil {
@@ -1413,7 +1459,9 @@ func (client *Client) updateCertificateOperationHandleResponse(resp *http.Respon
 //     method.
 func (client *Client) UpdateCertificatePolicy(ctx context.Context, certificateName string, certificatePolicy CertificatePolicy, options *UpdateCertificatePolicyOptions) (UpdateCertificatePolicyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateCertificatePolicy", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateCertificatePolicy"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateCertificatePolicyCreateRequest(ctx, certificateName, certificatePolicy, options)
 	if err != nil {
@@ -1471,7 +1519,9 @@ func (client *Client) updateCertificatePolicyHandleResponse(resp *http.Response)
 //   - options - UpdateIssuerOptions contains the optional parameters for the Client.UpdateIssuer method.
 func (client *Client) UpdateIssuer(ctx context.Context, issuerName string, parameter UpdateIssuerParameters, options *UpdateIssuerOptions) (UpdateIssuerResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateIssuer", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateIssuer"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateIssuerCreateRequest(ctx, issuerName, parameter, options)
 	if err != nil {

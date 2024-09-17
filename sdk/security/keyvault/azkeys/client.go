@@ -43,7 +43,9 @@ type Client struct {
 //   - options - BackupKeyOptions contains the optional parameters for the Client.BackupKey method.
 func (client *Client) BackupKey(ctx context.Context, name string, options *BackupKeyOptions) (BackupKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.BackupKey", client.internal.Tracer(), nil)
+	const operationName = "Client.BackupKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.backupKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -101,7 +103,9 @@ func (client *Client) backupKeyHandleResponse(resp *http.Response) (BackupKeyRes
 //   - options - CreateKeyOptions contains the optional parameters for the Client.CreateKey method.
 func (client *Client) CreateKey(ctx context.Context, name string, parameters CreateKeyParameters, options *CreateKeyOptions) (CreateKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.CreateKey", client.internal.Tracer(), nil)
+	const operationName = "Client.CreateKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.createKeyCreateRequest(ctx, name, parameters, options)
 	if err != nil {
@@ -166,7 +170,9 @@ func (client *Client) createKeyHandleResponse(resp *http.Response) (CreateKeyRes
 //   - options - DecryptOptions contains the optional parameters for the Client.Decrypt method.
 func (client *Client) Decrypt(ctx context.Context, name string, version string, parameters KeyOperationParameters, options *DecryptOptions) (DecryptResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.Decrypt", client.internal.Tracer(), nil)
+	const operationName = "Client.Decrypt"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.decryptCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -225,7 +231,9 @@ func (client *Client) decryptHandleResponse(resp *http.Response) (DecryptRespons
 //   - options - DeleteKeyOptions contains the optional parameters for the Client.DeleteKey method.
 func (client *Client) DeleteKey(ctx context.Context, name string, options *DeleteKeyOptions) (DeleteKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.DeleteKey", client.internal.Tracer(), nil)
+	const operationName = "Client.DeleteKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -286,7 +294,9 @@ func (client *Client) deleteKeyHandleResponse(resp *http.Response) (DeleteKeyRes
 //   - options - EncryptOptions contains the optional parameters for the Client.Encrypt method.
 func (client *Client) Encrypt(ctx context.Context, name string, version string, parameters KeyOperationParameters, options *EncryptOptions) (EncryptResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.Encrypt", client.internal.Tracer(), nil)
+	const operationName = "Client.Encrypt"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.encryptCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -345,7 +355,9 @@ func (client *Client) encryptHandleResponse(resp *http.Response) (EncryptRespons
 //   - options - GetDeletedKeyOptions contains the optional parameters for the Client.GetDeletedKey method.
 func (client *Client) GetDeletedKey(ctx context.Context, name string, options *GetDeletedKeyOptions) (GetDeletedKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetDeletedKey", client.internal.Tracer(), nil)
+	const operationName = "Client.GetDeletedKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getDeletedKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -401,7 +413,9 @@ func (client *Client) getDeletedKeyHandleResponse(resp *http.Response) (GetDelet
 //   - options - GetKeyOptions contains the optional parameters for the Client.GetKey method.
 func (client *Client) GetKey(ctx context.Context, name string, version string, options *GetKeyOptions) (GetKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetKey", client.internal.Tracer(), nil)
+	const operationName = "Client.GetKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getKeyCreateRequest(ctx, name, version, options)
 	if err != nil {
@@ -456,7 +470,9 @@ func (client *Client) getKeyHandleResponse(resp *http.Response) (GetKeyResponse,
 //   - options - GetKeyRotationPolicyOptions contains the optional parameters for the Client.GetKeyRotationPolicy method.
 func (client *Client) GetKeyRotationPolicy(ctx context.Context, name string, options *GetKeyRotationPolicyOptions) (GetKeyRotationPolicyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetKeyRotationPolicy", client.internal.Tracer(), nil)
+	const operationName = "Client.GetKeyRotationPolicy"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getKeyRotationPolicyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -509,7 +525,9 @@ func (client *Client) getKeyRotationPolicyHandleResponse(resp *http.Response) (G
 //   - options - GetRandomBytesOptions contains the optional parameters for the Client.GetRandomBytes method.
 func (client *Client) GetRandomBytes(ctx context.Context, parameters GetRandomBytesParameters, options *GetRandomBytesOptions) (GetRandomBytesResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.GetRandomBytes", client.internal.Tracer(), nil)
+	const operationName = "Client.GetRandomBytes"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getRandomBytesCreateRequest(ctx, parameters, options)
 	if err != nil {
@@ -565,7 +583,9 @@ func (client *Client) getRandomBytesHandleResponse(resp *http.Response) (GetRand
 //   - options - ImportKeyOptions contains the optional parameters for the Client.ImportKey method.
 func (client *Client) ImportKey(ctx context.Context, name string, parameters ImportKeyParameters, options *ImportKeyOptions) (ImportKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.ImportKey", client.internal.Tracer(), nil)
+	const operationName = "Client.ImportKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.importKeyCreateRequest(ctx, name, parameters, options)
 	if err != nil {
@@ -628,6 +648,7 @@ func (client *Client) NewListDeletedKeyPropertiesPager(options *ListDeletedKeyPr
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListDeletedKeyPropertiesResponse) (ListDeletedKeyPropertiesResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListDeletedKeyPropertiesPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -680,6 +701,7 @@ func (client *Client) NewListKeyPropertiesPager(options *ListKeyPropertiesOption
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListKeyPropertiesResponse) (ListKeyPropertiesResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListKeyPropertiesPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -732,6 +754,7 @@ func (client *Client) NewListKeyPropertiesVersionsPager(name string, options *Li
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListKeyPropertiesVersionsResponse) (ListKeyPropertiesVersionsResponse, error) {
+			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListKeyPropertiesVersionsPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -785,7 +808,9 @@ func (client *Client) listKeyPropertiesVersionsHandleResponse(resp *http.Respons
 //   - options - PurgeDeletedKeyOptions contains the optional parameters for the Client.PurgeDeletedKey method.
 func (client *Client) PurgeDeletedKey(ctx context.Context, name string, options *PurgeDeletedKeyOptions) (PurgeDeletedKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.PurgeDeletedKey", client.internal.Tracer(), nil)
+	const operationName = "Client.PurgeDeletedKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.purgeDeletedKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -831,7 +856,9 @@ func (client *Client) purgeDeletedKeyCreateRequest(ctx context.Context, name str
 //   - options - RecoverDeletedKeyOptions contains the optional parameters for the Client.RecoverDeletedKey method.
 func (client *Client) RecoverDeletedKey(ctx context.Context, name string, options *RecoverDeletedKeyOptions) (RecoverDeletedKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.RecoverDeletedKey", client.internal.Tracer(), nil)
+	const operationName = "Client.RecoverDeletedKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.recoverDeletedKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -887,7 +914,9 @@ func (client *Client) recoverDeletedKeyHandleResponse(resp *http.Response) (Reco
 //   - options - ReleaseOptions contains the optional parameters for the Client.Release method.
 func (client *Client) Release(ctx context.Context, name string, version string, parameters ReleaseParameters, options *ReleaseOptions) (ReleaseResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.Release", client.internal.Tracer(), nil)
+	const operationName = "Client.Release"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.releaseCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -952,7 +981,9 @@ func (client *Client) releaseHandleResponse(resp *http.Response) (ReleaseRespons
 //   - options - RestoreKeyOptions contains the optional parameters for the Client.RestoreKey method.
 func (client *Client) RestoreKey(ctx context.Context, parameters RestoreKeyParameters, options *RestoreKeyOptions) (RestoreKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.RestoreKey", client.internal.Tracer(), nil)
+	const operationName = "Client.RestoreKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.restoreKeyCreateRequest(ctx, parameters, options)
 	if err != nil {
@@ -1004,7 +1035,9 @@ func (client *Client) restoreKeyHandleResponse(resp *http.Response) (RestoreKeyR
 //   - options - RotateKeyOptions contains the optional parameters for the Client.RotateKey method.
 func (client *Client) RotateKey(ctx context.Context, name string, options *RotateKeyOptions) (RotateKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.RotateKey", client.internal.Tracer(), nil)
+	const operationName = "Client.RotateKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.rotateKeyCreateRequest(ctx, name, options)
 	if err != nil {
@@ -1060,7 +1093,9 @@ func (client *Client) rotateKeyHandleResponse(resp *http.Response) (RotateKeyRes
 //   - options - SignOptions contains the optional parameters for the Client.Sign method.
 func (client *Client) Sign(ctx context.Context, name string, version string, parameters SignParameters, options *SignOptions) (SignResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.Sign", client.internal.Tracer(), nil)
+	const operationName = "Client.Sign"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.signCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -1122,7 +1157,9 @@ func (client *Client) signHandleResponse(resp *http.Response) (SignResponse, err
 //   - options - UnwrapKeyOptions contains the optional parameters for the Client.UnwrapKey method.
 func (client *Client) UnwrapKey(ctx context.Context, name string, version string, parameters KeyOperationParameters, options *UnwrapKeyOptions) (UnwrapKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UnwrapKey", client.internal.Tracer(), nil)
+	const operationName = "Client.UnwrapKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.unwrapKeyCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -1182,7 +1219,9 @@ func (client *Client) unwrapKeyHandleResponse(resp *http.Response) (UnwrapKeyRes
 //   - options - UpdateKeyOptions contains the optional parameters for the Client.UpdateKey method.
 func (client *Client) UpdateKey(ctx context.Context, name string, version string, parameters UpdateKeyParameters, options *UpdateKeyOptions) (UpdateKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateKey", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateKeyCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -1242,7 +1281,9 @@ func (client *Client) updateKeyHandleResponse(resp *http.Response) (UpdateKeyRes
 //     method.
 func (client *Client) UpdateKeyRotationPolicy(ctx context.Context, name string, keyRotationPolicy KeyRotationPolicy, options *UpdateKeyRotationPolicyOptions) (UpdateKeyRotationPolicyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.UpdateKeyRotationPolicy", client.internal.Tracer(), nil)
+	const operationName = "Client.UpdateKeyRotationPolicy"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.updateKeyRotationPolicyCreateRequest(ctx, name, keyRotationPolicy, options)
 	if err != nil {
@@ -1304,7 +1345,9 @@ func (client *Client) updateKeyRotationPolicyHandleResponse(resp *http.Response)
 //   - options - VerifyOptions contains the optional parameters for the Client.Verify method.
 func (client *Client) Verify(ctx context.Context, name string, version string, parameters VerifyParameters, options *VerifyOptions) (VerifyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.Verify", client.internal.Tracer(), nil)
+	const operationName = "Client.Verify"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.verifyCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {
@@ -1368,7 +1411,9 @@ func (client *Client) verifyHandleResponse(resp *http.Response) (VerifyResponse,
 //   - options - WrapKeyOptions contains the optional parameters for the Client.WrapKey method.
 func (client *Client) WrapKey(ctx context.Context, name string, version string, parameters KeyOperationParameters, options *WrapKeyOptions) (WrapKeyResponse, error) {
 	var err error
-	ctx, endSpan := runtime.StartSpan(ctx, "Client.WrapKey", client.internal.Tracer(), nil)
+	const operationName = "Client.WrapKey"
+	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
+	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.wrapKeyCreateRequest(ctx, name, version, parameters, options)
 	if err != nil {

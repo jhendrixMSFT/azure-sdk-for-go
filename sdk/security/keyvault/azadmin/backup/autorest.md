@@ -11,9 +11,11 @@ output-folder: ../backup
 override-client-name: Client
 security: "AADToken"
 security-scopes: "https://vault.azure.net/.default"
-use: "@autorest/go@4.0.0-preview.59"
+use: "@autorest/go@4.0.0-preview.61"
 inject-spans: true
+generate-fakes: true
 version: "^3.0.0"
+containing-module: github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azadmin
 
 directive:
 
@@ -84,6 +86,12 @@ directive:
       - options.go
     where: $
     transform: return $.replace(/Client(\w+)((?:Options|Response))/g, "$1$2");
+  - from: fake/server.go
+    where: $
+    transform: return $.replace(/backup\.Client/g, "backup.");
+  - from: fake/server.go
+    where: $
+    transform: return $.replace(/backup\. /g, "backup.Client ");
 
   # add doc comments for models with missing descriptions
   - from: swagger-document

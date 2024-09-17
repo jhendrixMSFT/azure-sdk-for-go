@@ -12,8 +12,9 @@ output-folder: ../azcertificates
 override-client-name: Client
 security: "AADToken"
 security-scopes: "https://vault.azure.net/.default"
-use: "@autorest/go@4.0.0-preview.59"
+use: "@autorest/go@4.0.0-preview.61"
 inject-spans: true
+generate-fakes: true
 version: "^3.0.0"
 
 directive:
@@ -226,6 +227,12 @@ directive:
       - response_types.go
     where: $
     transform: return $.replace(/Client(\w+)((?:Options|Response))/g, "$1$2");
+  - from: fake/server.go
+    where: $
+    transform: return $.replace(/azcertificates\.Client/g, "azcertificates.");
+  - from: fake/server.go
+    where: $
+    transform: return $.replace(/azcertificates\. /g, "azcertificates.Client ");
 
   # make cert IDs a convenience type so we can add parsing methods
   # (specifying models because others have "ID" fields whose values aren't key vault object identifiers)

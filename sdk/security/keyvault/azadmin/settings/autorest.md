@@ -12,7 +12,7 @@ output-folder: ../settings
 override-client-name: Client
 security: "AADToken"
 security-scopes: "https://vault.azure.net/.default"
-use: "@autorest/go@4.0.0-preview.61"
+use: "@autorest/go@4.0.0-preview.59"
 inject-spans: true
 generate-fakes: true
 version: "^3.0.0"
@@ -42,12 +42,6 @@ directive:
       - options.go
     where: $
     transform: return $.replace(/Client(\w+)((?:Options|Response))/g, "$1$2");
-  - from: fake/server.go
-    where: $
-    transform: return $.replace(/settings\.Client/g, "settings.");
-  - from: fake/server.go
-    where: $
-    transform: return $.replace(/settings\. /g, "settings.Client ");
   
   # add doc comment for Setting
   - from: swagger-document

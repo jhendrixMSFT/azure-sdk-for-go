@@ -11,7 +11,7 @@ output-folder: ../rbac
 override-client-name: Client
 security: "AADToken"
 security-scopes: "https://vault.azure.net/.default"
-use: "@autorest/go@4.0.0-preview.61"
+use: "@autorest/go@4.0.0-preview.59"
 inject-spans: true
 generate-fakes: true
 version: "^3.0.0"
@@ -83,12 +83,6 @@ directive:
       - options.go
     where: $
     transform: return $.replace(/Client(\w+)((?:Options|Response))/g, "$1$2");
-  - from: fake/server.go
-    where: $
-    transform: return $.replace(/rbac\.Client/g, "rbac.");
-  - from: fake/server.go
-    where: $
-    transform: return $.replace(/rbac\. /g, "rbac.Client ");
 
   # fix up span names
   - from: client.go

@@ -37,9 +37,7 @@ type Client struct {
 //     method.
 func (client *Client) CreateOrUpdateRoleDefinition(ctx context.Context, scope RoleScope, roleDefinitionName string, parameters RoleDefinitionCreateParameters, options *CreateOrUpdateRoleDefinitionOptions) (CreateOrUpdateRoleDefinitionResponse, error) {
 	var err error
-	const operationName = "Client.CreateOrUpdateRoleDefinition"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.CreateOrUpdateRoleDefinition", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.createOrUpdateRoleDefinitionCreateRequest(ctx, scope, roleDefinitionName, parameters, options)
 	if err != nil {
@@ -98,9 +96,7 @@ func (client *Client) createOrUpdateRoleDefinitionHandleResponse(resp *http.Resp
 //   - options - CreateRoleAssignmentOptions contains the optional parameters for the Client.CreateRoleAssignment method.
 func (client *Client) CreateRoleAssignment(ctx context.Context, scope RoleScope, roleAssignmentName string, parameters RoleAssignmentCreateParameters, options *CreateRoleAssignmentOptions) (CreateRoleAssignmentResponse, error) {
 	var err error
-	const operationName = "Client.CreateRoleAssignment"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.CreateRoleAssignment", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.createRoleAssignmentCreateRequest(ctx, scope, roleAssignmentName, parameters, options)
 	if err != nil {
@@ -158,9 +154,7 @@ func (client *Client) createRoleAssignmentHandleResponse(resp *http.Response) (C
 //   - options - DeleteRoleAssignmentOptions contains the optional parameters for the Client.DeleteRoleAssignment method.
 func (client *Client) DeleteRoleAssignment(ctx context.Context, scope RoleScope, roleAssignmentName string, options *DeleteRoleAssignmentOptions) (DeleteRoleAssignmentResponse, error) {
 	var err error
-	const operationName = "Client.DeleteRoleAssignment"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.DeleteRoleAssignment", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteRoleAssignmentCreateRequest(ctx, scope, roleAssignmentName, options)
 	if err != nil {
@@ -215,9 +209,7 @@ func (client *Client) deleteRoleAssignmentHandleResponse(resp *http.Response) (D
 //   - options - DeleteRoleDefinitionOptions contains the optional parameters for the Client.DeleteRoleDefinition method.
 func (client *Client) DeleteRoleDefinition(ctx context.Context, scope RoleScope, roleDefinitionName string, options *DeleteRoleDefinitionOptions) (DeleteRoleDefinitionResponse, error) {
 	var err error
-	const operationName = "Client.DeleteRoleDefinition"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.DeleteRoleDefinition", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.deleteRoleDefinitionCreateRequest(ctx, scope, roleDefinitionName, options)
 	if err != nil {
@@ -272,9 +264,7 @@ func (client *Client) deleteRoleDefinitionHandleResponse(resp *http.Response) (D
 //   - options - GetRoleAssignmentOptions contains the optional parameters for the Client.GetRoleAssignment method.
 func (client *Client) GetRoleAssignment(ctx context.Context, scope RoleScope, roleAssignmentName string, options *GetRoleAssignmentOptions) (GetRoleAssignmentResponse, error) {
 	var err error
-	const operationName = "Client.GetRoleAssignment"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.GetRoleAssignment", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getRoleAssignmentCreateRequest(ctx, scope, roleAssignmentName, options)
 	if err != nil {
@@ -329,9 +319,7 @@ func (client *Client) getRoleAssignmentHandleResponse(resp *http.Response) (GetR
 //   - options - GetRoleDefinitionOptions contains the optional parameters for the Client.GetRoleDefinition method.
 func (client *Client) GetRoleDefinition(ctx context.Context, scope RoleScope, roleDefinitionName string, options *GetRoleDefinitionOptions) (GetRoleDefinitionResponse, error) {
 	var err error
-	const operationName = "Client.GetRoleDefinition"
-	ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, operationName)
-	ctx, endSpan := runtime.StartSpan(ctx, operationName, client.internal.Tracer(), nil)
+	ctx, endSpan := runtime.StartSpan(ctx, "rbac.Client.GetRoleDefinition", client.internal.Tracer(), nil)
 	defer func() { endSpan(err) }()
 	req, err := client.getRoleDefinitionCreateRequest(ctx, scope, roleDefinitionName, options)
 	if err != nil {
@@ -389,7 +377,6 @@ func (client *Client) NewListRoleAssignmentsPager(scope RoleScope, options *List
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListRoleAssignmentsResponse) (ListRoleAssignmentsResponse, error) {
-			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListRoleAssignmentsPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink
@@ -445,7 +432,6 @@ func (client *Client) NewListRoleDefinitionsPager(scope RoleScope, options *List
 			return page.NextLink != nil && len(*page.NextLink) > 0
 		},
 		Fetcher: func(ctx context.Context, page *ListRoleDefinitionsResponse) (ListRoleDefinitionsResponse, error) {
-			ctx = context.WithValue(ctx, runtime.CtxAPINameKey{}, "Client.NewListRoleDefinitionsPager")
 			nextLink := ""
 			if page != nil {
 				nextLink = *page.NextLink

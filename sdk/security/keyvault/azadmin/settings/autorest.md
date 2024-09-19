@@ -14,7 +14,6 @@ security: "AADToken"
 security-scopes: "https://vault.azure.net/.default"
 use: "@autorest/go@4.0.0-preview.59"
 inject-spans: true
-generate-fakes: true
 version: "^3.0.0"
 containing-module: github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azadmin
 

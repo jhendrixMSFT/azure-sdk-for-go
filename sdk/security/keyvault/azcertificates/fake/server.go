@@ -406,7 +406,7 @@ func (s *ServerTransport) dispatchGetCertificate(req *http.Request) (*http.Respo
 	if s.srv.GetCertificate == nil {
 		return nil, &nonRetriableError{errors.New("fake for method GetCertificate not implemented")}
 	}
-	const regexStr = `/certificates/(?P<certificate_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<certificate_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/certificates/(?P<certificate_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<certificate_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -925,7 +925,7 @@ func (s *ServerTransport) dispatchUpdateCertificate(req *http.Request) (*http.Re
 	if s.srv.UpdateCertificate == nil {
 		return nil, &nonRetriableError{errors.New("fake for method UpdateCertificate not implemented")}
 	}
-	const regexStr = `/certificates/(?P<certificate_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<certificate_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/certificates/(?P<certificate_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<certificate_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {

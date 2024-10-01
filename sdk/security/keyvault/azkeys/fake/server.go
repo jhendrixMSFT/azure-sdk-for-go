@@ -279,7 +279,7 @@ func (s *ServerTransport) dispatchDecrypt(req *http.Request) (*http.Response, er
 	if s.srv.Decrypt == nil {
 		return nil, &nonRetriableError{errors.New("fake for method Decrypt not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/decrypt`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/decrypt`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -345,7 +345,7 @@ func (s *ServerTransport) dispatchEncrypt(req *http.Request) (*http.Response, er
 	if s.srv.Encrypt == nil {
 		return nil, &nonRetriableError{errors.New("fake for method Encrypt not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/encrypt`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/encrypt`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -411,7 +411,7 @@ func (s *ServerTransport) dispatchGetKey(req *http.Request) (*http.Response, err
 	if s.srv.GetKey == nil {
 		return nil, &nonRetriableError{errors.New("fake for method GetKey not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -678,7 +678,7 @@ func (s *ServerTransport) dispatchRelease(req *http.Request) (*http.Response, er
 	if s.srv.Release == nil {
 		return nil, &nonRetriableError{errors.New("fake for method Release not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/release`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/release`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -767,7 +767,7 @@ func (s *ServerTransport) dispatchSign(req *http.Request) (*http.Response, error
 	if s.srv.Sign == nil {
 		return nil, &nonRetriableError{errors.New("fake for method Sign not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/sign`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/sign`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -804,7 +804,7 @@ func (s *ServerTransport) dispatchUnwrapKey(req *http.Request) (*http.Response, 
 	if s.srv.UnwrapKey == nil {
 		return nil, &nonRetriableError{errors.New("fake for method UnwrapKey not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/unwrapkey`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/unwrapkey`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -841,7 +841,7 @@ func (s *ServerTransport) dispatchUpdateKey(req *http.Request) (*http.Response, 
 	if s.srv.UpdateKey == nil {
 		return nil, &nonRetriableError{errors.New("fake for method UpdateKey not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -911,7 +911,7 @@ func (s *ServerTransport) dispatchVerify(req *http.Request) (*http.Response, err
 	if s.srv.Verify == nil {
 		return nil, &nonRetriableError{errors.New("fake for method Verify not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/verify`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/verify`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -948,7 +948,7 @@ func (s *ServerTransport) dispatchWrapKey(req *http.Request) (*http.Response, er
 	if s.srv.WrapKey == nil {
 		return nil, &nonRetriableError{errors.New("fake for method WrapKey not implemented")}
 	}
-	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/wrapkey`
+	const regexStr = `/keys/(?P<key_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<key_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]*)/wrapkey`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {

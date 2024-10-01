@@ -232,7 +232,7 @@ func (s *ServerTransport) dispatchGetSecret(req *http.Request) (*http.Response, 
 	if s.srv.GetSecret == nil {
 		return nil, &nonRetriableError{errors.New("fake for method GetSecret not implemented")}
 	}
-	const regexStr = `/secrets/(?P<secret_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<secret_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/secrets/(?P<secret_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<secret_version>[!#&$-;=?-[]_a-zA-Z0-9~%@]+)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {
@@ -470,7 +470,7 @@ func (s *ServerTransport) dispatchUpdateSecretProperties(req *http.Request) (*ht
 	if s.srv.UpdateSecretProperties == nil {
 		return nil, &nonRetriableError{errors.New("fake for method UpdateSecretProperties not implemented")}
 	}
-	const regexStr = `/secrets/(?P<secret_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<secret_version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)`
+	const regexStr = `/secrets/(?P<secret_name>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+)/(?P<secret_version>[!#&$-;=?-[]_a-zA-Z0-9~%@]+)`
 	regex := regexp.MustCompile(regexStr)
 	matches := regex.FindStringSubmatch(req.URL.EscapedPath())
 	if matches == nil || len(matches) < 2 {

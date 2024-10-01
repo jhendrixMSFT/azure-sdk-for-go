@@ -110,6 +110,9 @@ directive:
   - from: client.go
     where: $
     transform: return $.replace(/\sif secretVersion == "" \{\s+.+secretVersion cannot be empty"\)\s+\}\s/g, "");
+  - from: fake/server.go
+    where: $
+    transform: return $.replace(/version.*\+/g, "version>[!#&$-;=?-\[\]_a-zA-Z0-9~%@]+");
 
   # delete client name prefix from method options and response types
   - from:

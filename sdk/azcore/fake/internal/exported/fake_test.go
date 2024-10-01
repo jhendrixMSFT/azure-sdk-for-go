@@ -4,7 +4,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package exported
+package exported_test
 
 import (
 	"encoding/json"
@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
@@ -32,12 +33,12 @@ type widgets struct {
 }
 
 func TestResponder(t *testing.T) {
-	respr := Responder[widget]{}
+	respr := exported.Responder[widget]{}
 	header := http.Header{}
 	header.Set("one", "1")
 	header.Set("two", "2")
 	thing := widget{Name: "foo"}
-	respr.SetResponse(http.StatusOK, thing, &SetResponseOptions{Header: header})
+	respr.SetResponse(http.StatusOK, thing, &exported.SetResponseOptions{Header: header})
 	require.EqualValues(t, thing, respr.GetResponse())
 	require.EqualValues(t, http.StatusOK, respr.GetResponseContent().HTTPStatus)
 	require.EqualValues(t, header, respr.GetResponseContent().Header)
@@ -46,7 +47,7 @@ func TestResponder(t *testing.T) {
 func TestErrorResponder(t *testing.T) {
 	req := &http.Request{}
 
-	errResp := ErrorResponder{}
+	errResp := exported.ErrorResponder{}
 	require.NoError(t, errResp.GetError(req))
 
 	myErr := errors.New("failed")
@@ -80,7 +81,7 @@ func TestPagerResponder(t *testing.T) {
 	req.URL.Host = "fakehost.org"
 	req.URL.Path = "/lister"
 
-	pagerResp := PagerResponder[widgets]{}
+	pagerResp := exported.PagerResponder[widgets]{}
 
 	require.False(t, pagerResp.More())
 	resp, err := pagerResp.Next(req)
@@ -121,7 +122,7 @@ func TestPagerResponder(t *testing.T) {
 			page, err := unmarshal[widgets](resp)
 			require.NoError(t, err)
 			require.NotNil(t, page.NextPage)
-			sanitizedNextPage := SanitizePagerPath(*page.NextPage)
+			sanitizedNextPage := exported.SanitizePagerPath(*page.NextPage)
 			require.NotEqualValues(t, sanitizedNextPage, *page.NextPage)
 			require.True(t, strings.HasPrefix(*page.NextPage, sanitizedNextPage))
 			require.Equal(t, []widget{{Name: "foo"}, {Name: "bar"}}, page.Widgets)
@@ -151,7 +152,7 @@ func TestPagerResponder(t *testing.T) {
 	require.Equal(t, 5, iterations)
 
 	// single page with subsequent error
-	pagerResp = PagerResponder[widgets]{}
+	pagerResp = exported.PagerResponder[widgets]{}
 
 	pagerResp.AddPage(http.StatusOK, widgets{
 		Widgets: []widget{
@@ -185,7 +186,7 @@ func TestPagerResponder(t *testing.T) {
 	require.EqualValues(t, 2, iterations)
 
 	// single page with subsequent response error
-	pagerResp = PagerResponder[widgets]{}
+	pagerResp = exported.PagerResponder[widgets]{}
 
 	pagerResp.AddPage(http.StatusOK, widgets{
 		Widgets: []widget{
@@ -219,7 +220,7 @@ func TestPagerResponder(t *testing.T) {
 	require.EqualValues(t, 2, iterations)
 
 	// single page
-	pagerResp = PagerResponder[widgets]{}
+	pagerResp = exported.PagerResponder[widgets]{}
 
 	pagerResp.AddPage(http.StatusOK, widgets{
 		Widgets: []widget{
@@ -254,7 +255,7 @@ func TestPollerResponder(t *testing.T) {
 	req.URL.Host = "fakehost.org"
 	req.URL.Path = "/lro"
 
-	pollerResp := PollerResponder[widget]{}
+	pollerResp := exported.PollerResponder[widget]{}
 
 	require.False(t, pollerResp.More())
 	resp, err := pollerResp.Next(req)
@@ -300,7 +301,7 @@ func TestPollerResponderTerminalFailure(t *testing.T) {
 	req.URL.Host = "fakehost.org"
 	req.URL.Path = "/lro"
 
-	pollerResp := PollerResponder[widget]{}
+	pollerResp := exported.PollerResponder[widget]{}
 
 	require.False(t, pollerResp.More())
 	resp, err := pollerResp.Next(req)
@@ -339,11 +340,11 @@ func TestPollerResponderTerminalFailure(t *testing.T) {
 }
 
 func TestNewResponse(t *testing.T) {
-	resp, err := NewResponse(ResponseContent{}, nil)
+	resp, err := exported.NewResponse(exported.ResponseContent{}, nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
 
-	resp, err = NewResponse(ResponseContent{HTTPStatus: http.StatusNoContent}, nil)
+	resp, err = exported.NewResponse(exported.ResponseContent{HTTPStatus: http.StatusNoContent}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.EqualValues(t, http.StatusNoContent, resp.StatusCode)
@@ -351,11 +352,11 @@ func TestNewResponse(t *testing.T) {
 }
 
 func TestNewErrorResponse(t *testing.T) {
-	resp, err := newErrorResponse(0, "", nil)
+	resp, err := exported.NewErrorResponse(0, "", nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
 	const errorCode = "YouCantDoThat"
-	resp, err = newErrorResponse(http.StatusForbidden, errorCode, nil)
+	resp, err = exported.NewErrorResponse(http.StatusForbidden, errorCode, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, http.StatusForbidden, resp.StatusCode)
 	require.EqualValues(t, errorCode, resp.Header.Get(shared.HeaderXMSErrorCode))

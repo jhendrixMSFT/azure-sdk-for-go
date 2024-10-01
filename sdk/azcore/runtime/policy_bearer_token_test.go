@@ -5,12 +5,15 @@ package runtime
 
 import (
 	"context"
+	"io"
+	"strings"
 
 	"errors"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -261,6 +264,36 @@ func TestBearerTokenPolicy_NilCredential(t *testing.T) {
 	}), policy)
 	req, err := NewRequest(context.Background(), "GET", "http://contoso.com")
 	require.NoError(t, err)
+	_, err = pl.Do(req)
+	require.NoError(t, err)
+}
+
+func TestBearerTokenPolicy_AuthZHandler_FakeCredential(t *testing.T) {
+	srv, close := mock.NewTLSServer()
+	defer close()
+
+	srv.AppendResponse(mock.WithPredicate(func(r *http.Request) bool {
+		body, err := io.ReadAll(r.Body)
+		return err == nil && string(body) == "payload"
+	}), mock.WithStatusCode(http.StatusNoContent))
+	srv.AppendError(errors.New("missing request body"))
+
+	handler := policy.AuthorizationHandler{
+		OnRequest: func(r *policy.Request, f func(policy.TokenRequestOptions) error) error {
+			return errors.New("unexpected call to OnRequest")
+		},
+		OnChallenge: func(r1 *policy.Request, r2 *http.Response, f func(policy.TokenRequestOptions) error) error {
+			return errors.New("unexpected call to OnChallenge")
+		},
+	}
+
+	b := NewBearerTokenPolicy(&fake.TokenCredential{}, nil, &policy.BearerTokenOptions{AuthorizationHandler: handler})
+	pl := newTestPipeline(&policy.ClientOptions{Transport: srv, PerRetryPolicies: []policy.Policy{b}})
+
+	req, err := NewRequest(context.Background(), http.MethodPut, srv.URL())
+	require.NoError(t, err)
+	require.NoError(t, req.SetBody(exported.NopCloser(strings.NewReader("payload")), shared.ContentTypeTextPlain))
+
 	_, err = pl.Do(req)
 	require.NoError(t, err)
 }

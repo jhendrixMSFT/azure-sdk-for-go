@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -87,10 +88,12 @@ func (b *BearerTokenPolicy) Do(req *policy.Request) (*http.Response, error) {
 	}
 
 	var err error
-	if b.authzHandler.OnRequest != nil {
-		err = b.authzHandler.OnRequest(req, b.authenticateAndAuthorize(req))
-	} else {
+
+	// if the underlying TokenCredential is a fake then skip the authorization handler
+	if _, ok := b.cred.(*fake.TokenCredential); ok || b.authzHandler.OnRequest == nil {
 		err = b.authenticateAndAuthorize(req)(policy.TokenRequestOptions{Scopes: b.scopes})
+	} else {
+		err = b.authzHandler.OnRequest(req, b.authenticateAndAuthorize(req))
 	}
 	if err != nil {
 		return nil, errorinfo.NonRetriableError(err)

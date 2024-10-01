@@ -12,8 +12,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake/internal/exported"
+	azexported "github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
 )
@@ -30,11 +30,11 @@ func (t *TokenCredential) SetError(err error) {
 }
 
 // GetToken implements the azcore.TokenCredential for the TokenCredential type.
-func (t *TokenCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+func (t *TokenCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azexported.AccessToken, error) {
 	if t.err != nil {
-		return azcore.AccessToken{}, errorinfo.NonRetriableError(t.err)
+		return azexported.AccessToken{}, errorinfo.NonRetriableError(t.err)
 	}
-	return azcore.AccessToken{Token: "fake_token", ExpiresOn: time.Now().Add(24 * time.Hour)}, nil
+	return azexported.AccessToken{Token: "fake_token", ExpiresOn: time.Now().Add(24 * time.Hour)}, nil
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////

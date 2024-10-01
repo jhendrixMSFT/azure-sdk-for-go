@@ -4,7 +4,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-package server
+package server_test
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/fake/server"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -50,7 +51,7 @@ func (*badWidget) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) error {
 func TestNewResponse(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
-	resp, err := NewResponse(ResponseContent{HTTPStatus: http.StatusNoContent}, req, nil)
+	resp, err := server.NewResponse(server.ResponseContent{HTTPStatus: http.StatusNoContent}, req, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, http.StatusNoContent, resp.StatusCode)
 }
@@ -58,7 +59,7 @@ func TestNewResponse(t *testing.T) {
 func TestNewResponseWithOptions(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
-	resp, err := NewResponse(ResponseContent{HTTPStatus: http.StatusOK}, req, &ResponseOptions{
+	resp, err := server.NewResponse(server.ResponseContent{HTTPStatus: http.StatusOK}, req, &server.ResponseOptions{
 		Body:        io.NopCloser(strings.NewReader("the body")),
 		ContentType: shared.ContentTypeTextPlain,
 	})
@@ -75,7 +76,7 @@ func TestMarshalUnmarshalAsJSON(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	resp, err := MarshalResponseAsJSON(ResponseContent{HTTPStatus: http.StatusOK}, thing, req)
+	resp, err := server.MarshalResponseAsJSON(server.ResponseContent{HTTPStatus: http.StatusOK}, thing, req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -85,7 +86,7 @@ func TestMarshalUnmarshalAsJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	w, err := UnmarshalRequestAsJSON[widget](req)
+	w, err := server.UnmarshalRequestAsJSON[widget](req)
 	require.NoError(t, err)
 	require.Equal(t, "foo", w.Name)
 
@@ -93,7 +94,7 @@ func TestMarshalUnmarshalAsJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	w, err = UnmarshalRequestAsJSON[widget](req)
+	w, err = server.UnmarshalRequestAsJSON[widget](req)
 	require.NoError(t, err)
 	require.Zero(t, w)
 }
@@ -103,7 +104,7 @@ func TestMarshalUnmarshalAsText(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	resp, err := MarshalResponseAsText(ResponseContent{HTTPStatus: http.StatusOK}, to.Ptr(thing), req)
+	resp, err := server.MarshalResponseAsText(server.ResponseContent{HTTPStatus: http.StatusOK}, to.Ptr(thing), req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -113,7 +114,7 @@ func TestMarshalUnmarshalAsText(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	txt, err := UnmarshalRequestAsText(req)
+	txt, err := server.UnmarshalRequestAsText(req)
 	require.NoError(t, err)
 	require.Equal(t, "some text", txt)
 
@@ -121,7 +122,7 @@ func TestMarshalUnmarshalAsText(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	txt, err = UnmarshalRequestAsText(req)
+	txt, err = server.UnmarshalRequestAsText(req)
 	require.NoError(t, err)
 	require.Zero(t, txt)
 }
@@ -131,7 +132,7 @@ func TestMarshalUnmarshalAsXML(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	resp, err := MarshalResponseAsXML(ResponseContent{HTTPStatus: http.StatusOK}, thing, req)
+	resp, err := server.MarshalResponseAsXML(server.ResponseContent{HTTPStatus: http.StatusOK}, thing, req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestMarshalUnmarshalAsXML(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	w, err := UnmarshalRequestAsXML[widget](req)
+	w, err := server.UnmarshalRequestAsXML[widget](req)
 	require.NoError(t, err)
 	require.Equal(t, "foo", w.Name)
 
@@ -149,7 +150,7 @@ func TestMarshalUnmarshalAsXML(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	w, err = UnmarshalRequestAsXML[widget](req)
+	w, err = server.UnmarshalRequestAsXML[widget](req)
 	require.NoError(t, err)
 	require.Zero(t, w)
 }
@@ -161,22 +162,22 @@ func TestUnmarshalRequestReadFailure(t *testing.T) {
 
 	var nre errorinfo.NonRetriable
 
-	b, err := UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
+	b, err := server.UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
 	require.Error(t, err)
 	require.Zero(t, b)
 	require.ErrorAs(t, err, &nre)
 
-	w, err := UnmarshalRequestAsJSON[widget](req)
+	w, err := server.UnmarshalRequestAsJSON[widget](req)
 	require.Error(t, err)
 	require.Zero(t, w)
 	require.ErrorAs(t, err, &nre)
 
-	s, err := UnmarshalRequestAsText(req)
+	s, err := server.UnmarshalRequestAsText(req)
 	require.Error(t, err)
 	require.Zero(t, s)
 	require.ErrorAs(t, err, &nre)
 
-	w, err = UnmarshalRequestAsXML[widget](req)
+	w, err = server.UnmarshalRequestAsXML[widget](req)
 	require.Error(t, err)
 	require.Zero(t, w)
 	require.ErrorAs(t, err, &nre)
@@ -187,19 +188,19 @@ func TestMarshalUnmarshalFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 
-	resp, err := MarshalResponseAsJSON(ResponseContent{}, badWidget{}, nil)
+	resp, err := server.MarshalResponseAsJSON(server.ResponseContent{}, badWidget{}, nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
 
-	resp, err = MarshalResponseAsXML(ResponseContent{}, badWidget{}, nil)
+	resp, err = server.MarshalResponseAsXML(server.ResponseContent{}, badWidget{}, nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
 
-	w, err := UnmarshalRequestAsJSON[badWidget](req)
+	w, err := server.UnmarshalRequestAsJSON[badWidget](req)
 	require.Error(t, err)
 	require.Zero(t, w)
 
-	w, err = UnmarshalRequestAsXML[badWidget](req)
+	w, err = server.UnmarshalRequestAsXML[badWidget](req)
 	require.Error(t, err)
 	require.Zero(t, w)
 }
@@ -209,10 +210,10 @@ func TestMarshalUnmarshalAsByteArray(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPut, "https://foo.bar/baz", nil)
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	body, err := UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
+	body, err := server.UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
 	require.NoError(t, err)
 	require.Nil(t, body)
-	resp, err := MarshalResponseAsByteArray(ResponseContent{HTTPStatus: http.StatusOK}, []byte(encodeVal), exported.Base64StdFormat, req)
+	resp, err := server.MarshalResponseAsByteArray(server.ResponseContent{HTTPStatus: http.StatusOK}, []byte(encodeVal), exported.Base64StdFormat, req)
 	require.NoError(t, err)
 	body, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
@@ -221,14 +222,14 @@ func TestMarshalUnmarshalAsByteArray(t *testing.T) {
 	req, err = http.NewRequest(http.MethodPut, "https://foo.bar/baz", io.NopCloser(bytes.NewReader(body)))
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	body, err = UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
+	body, err = server.UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
 	require.NoError(t, err)
 	require.EqualValues(t, encodeVal, string(body))
 
 	req, err = http.NewRequest(http.MethodPut, "https://foo.bar/baz", io.NopCloser(strings.NewReader("not base64 encoded")))
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	body, err = UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
+	body, err = server.UnmarshalRequestAsByteArray(req, exported.Base64StdFormat)
 	require.Error(t, err)
 	require.Nil(t, body)
 }
@@ -240,37 +241,37 @@ func TestResponderHelpers(t *testing.T) {
 	}
 	respr := fake.Responder[widget]{}
 	respr.SetResponse(http.StatusOK, thing, &fake.SetResponseOptions{Header: header})
-	require.EqualValues(t, thing, GetResponse(respr))
-	require.EqualValues(t, http.StatusOK, GetResponseContent(respr).HTTPStatus)
-	require.EqualValues(t, header, GetResponseContent(respr).Header)
+	require.EqualValues(t, thing, server.GetResponse(respr))
+	require.EqualValues(t, http.StatusOK, server.GetResponseContent(respr).HTTPStatus)
+	require.EqualValues(t, header, server.GetResponseContent(respr).Header)
 }
 
 func TestErrorResponderHelpers(t *testing.T) {
 	errResp := fake.ErrorResponder{}
 	errResp.SetError(io.EOF)
-	require.ErrorIs(t, GetError(errResp, nil), io.EOF)
+	require.ErrorIs(t, server.GetError(errResp, nil), io.EOF)
 }
 
 func TestPagerResponderHelpers(t *testing.T) {
 	pagerResp := fake.PagerResponder[widget]{}
-	require.False(t, PagerResponderMore(&pagerResp))
-	resp, err := PagerResponderNext(&pagerResp, nil)
+	require.False(t, server.PagerResponderMore(&pagerResp))
+	resp, err := server.PagerResponderNext(&pagerResp, nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
-	PagerResponderInjectNextLinks(&pagerResp, nil, func(page *widget, createLink func() string) {})
+	server.PagerResponderInjectNextLinks(&pagerResp, nil, func(page *widget, createLink func() string) {})
 }
 
 func TestPollerResponderHelpers(t *testing.T) {
 	pollerResp := fake.PollerResponder[widget]{}
-	require.False(t, PollerResponderMore(&pollerResp))
-	resp, err := PollerResponderNext(&pollerResp, nil)
+	require.False(t, server.PollerResponderMore(&pollerResp))
+	resp, err := server.PollerResponderNext(&pollerResp, nil)
 	require.Error(t, err)
 	require.Nil(t, resp)
 }
 
 func TestSanitizePagerPollerPath(t *testing.T) {
 	const untouched = "/this/path/wont/change"
-	require.EqualValues(t, untouched, SanitizePagerPollerPath(untouched))
+	require.EqualValues(t, untouched, server.SanitizePagerPollerPath(untouched))
 }
 
 type readFailer struct {

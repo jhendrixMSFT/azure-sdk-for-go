@@ -10,6 +10,8 @@
 
 ### Other Changes
 
+* Ensure that `fake.TokenCredential` works with bearer token policies that specify an authorization handler.
+
 ## 1.14.0 (2024-08-07)
 
 ### Features Added

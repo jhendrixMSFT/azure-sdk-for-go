@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
@@ -86,10 +85,10 @@ func (e ErrorResponder) GetError(req *http.Request) error {
 		return nil
 	}
 
-	var respErr *azcore.ResponseError
+	var respErr *exported.ResponseError
 	if errors.As(e.err, &respErr) {
 		// fix up the raw response
-		rawResp, err := newErrorResponse(respErr.StatusCode, respErr.ErrorCode, req)
+		rawResp, err := NewErrorResponse(respErr.StatusCode, respErr.ErrorCode, req)
 		if err != nil {
 			return errorinfo.NonRetriableError(err)
 		}
@@ -158,10 +157,10 @@ func (p *PagerResponder[T]) Next(req *http.Request) (*http.Response, error) {
 	}
 
 	err := page.(error)
-	var respErr *azcore.ResponseError
+	var respErr *exported.ResponseError
 	if errors.As(err, &respErr) {
 		// fix up the raw response
-		rawResp, err := newErrorResponse(respErr.StatusCode, respErr.ErrorCode, req)
+		rawResp, err := NewErrorResponse(respErr.StatusCode, respErr.ErrorCode, req)
 		if err != nil {
 			return nil, errorinfo.NonRetriableError(err)
 		}
@@ -296,7 +295,7 @@ func (p *PollerResponder[T]) Next(req *http.Request) (*http.Response, error) {
 
 	if p.err != nil {
 		respErr := p.err
-		rawResp, err := newErrorResponse(p.err.StatusCode, p.err.ErrorCode, req)
+		rawResp, err := NewErrorResponse(p.err.StatusCode, p.err.ErrorCode, req)
 		if err != nil {
 			return nil, errorinfo.NonRetriableError(err)
 		}
@@ -396,7 +395,9 @@ func SanitizePagerPath(path string) string {
 	return pageSuffixRegex.ReplaceAllLiteralString(path, "")
 }
 
-func newErrorResponse(statusCode int, errorCode string, req *http.Request) (*http.Response, error) {
+// NewErrorResponse creates an *http.Response with error response content.
+// Exported for testing purposes only.
+func NewErrorResponse(statusCode int, errorCode string, req *http.Request) (*http.Response, error) {
 	content := ResponseContent{
 		HTTPStatus: statusCode,
 		Header:     http.Header{},

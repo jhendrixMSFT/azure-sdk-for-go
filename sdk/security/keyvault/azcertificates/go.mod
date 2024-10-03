@@ -24,3 +24,5 @@ require (
 	golang.org/x/text v0.16.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal => ../internal

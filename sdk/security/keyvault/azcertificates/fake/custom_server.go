@@ -7,32 +7,9 @@
 package fake
 
 import (
-	"net/http"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal"
 )
 
-type myServerTransportInterceptor struct {
-	authenticated bool
-}
-
-func (m *myServerTransportInterceptor) Intercept(req *http.Request) (*http.Response, error, bool) {
-	if m.authenticated {
-		return nil, nil, false
-	}
-
-	resp := &http.Response{
-		Request:    req,
-		Status:     "fake unauthorized",
-		StatusCode: http.StatusUnauthorized,
-		Body:       http.NoBody,
-		Header:     http.Header{},
-	}
-
-	resp.Header.Set("WWW-Authenticate", "Bearer authorization=\"https://fake.login.microsoftonline.com/00000000-0000-0000-0000-000000000000\" resource=\"https://vault.azure.net\"")
-
-	m.authenticated = true
-	return resp, nil, true
-}
-
 func init() {
-	serverTransportInterceptor = &myServerTransportInterceptor{}
+	serverTransportInterceptor = &internal.FakeChallenge{}
 }

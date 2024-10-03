@@ -167,7 +167,7 @@ func (s *ServerTransport) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	if serverTransportInterceptor != nil {
-		if resp, err, ok := serverTransportInterceptor.Intercept(req); ok {
+		if resp, err, ok := serverTransportInterceptor.Do(req); ok {
 			return resp, err
 		}
 	}
@@ -1065,5 +1065,5 @@ func (s *ServerTransport) dispatchUpdateIssuer(req *http.Request) (*http.Respons
 }
 
 var serverTransportInterceptor interface {
-	Intercept(*http.Request) (*http.Response, error, bool)
+	Do(*http.Request) (*http.Response, error, bool)
 }

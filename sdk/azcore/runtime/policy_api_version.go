@@ -30,7 +30,9 @@ const (
 	APIVersionLocationQueryParam = 0
 	// APIVersionLocationHeader indicates a header
 	APIVersionLocationHeader = 1
-	// APIVersionLocationClient indicates the client sets the API version
+	// APIVersionLocationClient indicates the client sets the API version.
+	// This should only be set by clients whose constructor functions
+	// explicitly manage the API version.
 	APIVersionLocationClient = 2
 )
 

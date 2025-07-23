@@ -1,8 +1,10 @@
 # Release History
 
-## 1.18.2-beta.1 (Unreleased)
+## 1.19.0 (Unreleased)
 
 ### Features Added
+
+* Added `runtime.APIVersionLocationClient` to be set by clients that manage setting the API version.
 
 ### Breaking Changes
 

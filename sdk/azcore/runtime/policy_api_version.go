@@ -30,6 +30,8 @@ const (
 	APIVersionLocationQueryParam = 0
 	// APIVersionLocationHeader indicates a header
 	APIVersionLocationHeader = 1
+	// APIVersionLocationClient indicates the client sets the API version
+	APIVersionLocationClient = 2
 )
 
 // newAPIVersionPolicy constructs an APIVersionPolicy. If version is "", Do will be a no-op. If version

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -75,10 +76,17 @@ func NewClient(endpoint string, cred azcore.TokenCredential, o *ClientOptions) (
 	if err != nil {
 		return nil, err
 	}
-	scope, err := createScopeFromEndpoint(endpointUrl)
-	if err != nil {
-		return nil, err
+
+	var audience string
+	if o == nil || reflect.ValueOf(o.Cloud).IsZero() {
+		audience = createAudienceFromEndpoint(endpointUrl)
+	} else if cfg, ok := o.Cloud.Services[ServiceName]; ok && cfg.Audience != "" {
+		audience = cfg.Audience
+	} else {
+		return nil, errors.New("provided Cloud field is missing Azure Cosmos configuration")
 	}
+
+	scope := []string{audience + "/.default"}
 	preferredRegions := []string{}
 	enableCrossRegionRetries := true
 	if o != nil {
@@ -170,8 +178,8 @@ func newInternalPipeline(authPolicy policy.Policy, options *ClientOptions) azrun
 		&options.ClientOptions)
 }
 
-func createScopeFromEndpoint(endpoint *url.URL) ([]string, error) {
-	return []string{fmt.Sprintf("%s://%s/.default", endpoint.Scheme, endpoint.Hostname())}, nil
+func createAudienceFromEndpoint(endpoint *url.URL) string {
+	return fmt.Sprintf("%s://%s", endpoint.Scheme, endpoint.Hostname())
 }
 
 // NewDatabase returns a struct that represents a database and allows database level operations.

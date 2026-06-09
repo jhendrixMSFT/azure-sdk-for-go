@@ -688,22 +688,36 @@ func (t *TypeSpecUpdateGenerator) AfterGenerate(generateParam *GenerateParam) (*
 	var prl utils.PullRequestLabel
 	var err error
 	var newVersion *semver.Version
+	var changelogMd string
 
-	log.Printf("Calculate new version...")
-	newVersion, prl, err = version.CalculateNewVersion(t.ChangelogResult.ChangelogData, t.ChangelogResult.PreviousVersion, t.IsCurrentPreview)
-	if err != nil {
-		return nil, err
-	}
+	// When `containing-module` is set in tspconfig.yaml, the generated package is a
+	// sub-package within an existing module. The containing module owns its own
+	// version, CHANGELOG.md, go.mod, README.md, autorest.md and import paths, so
+	// the sub-package generation must not recompute the version, write to the
+	// module's CHANGELOG.md, or update any module-level version files.
+	if t.TypeSpecConfig.Options.GoConfig.ContainingModule != "" {
+		log.Printf("Skip version recompute, changelog write and version-file updates because `containing-module` is set in tspconfig.yaml")
+		// Surface the containing module's existing version unchanged.
+		if newVersion, err = semver.NewVersion(t.ChangelogResult.PreviousVersion); err != nil {
+			return nil, err
+		}
+	} else {
+		log.Printf("Calculate new version...")
+		newVersion, prl, err = version.CalculateNewVersion(t.ChangelogResult.ChangelogData, t.ChangelogResult.PreviousVersion, t.IsCurrentPreview)
+		if err != nil {
+			return nil, err
+		}
 
-	log.Printf("Add changelog to file...")
-	changelogMd, err := changelog.AddChangelogToFileWithReplacement(t.ChangelogResult.ChangelogData, newVersion, t.ModulePath, generateParam.ReleaseDate)
-	if err != nil {
-		return nil, err
-	}
+		log.Printf("Add changelog to file...")
+		changelogMd, err = changelog.AddChangelogToFileWithReplacement(t.ChangelogResult.ChangelogData, newVersion, t.ModulePath, generateParam.ReleaseDate)
+		if err != nil {
+			return nil, err
+		}
 
-	log.Printf("Update all version files...")
-	if err = version.UpdateAllVersionFiles(t.PackagePath, newVersion, *t.SDKRepo); err != nil {
-		return nil, err
+		log.Printf("Update all version files...")
+		if err = version.UpdateAllVersionFiles(t.PackagePath, newVersion, *t.SDKRepo); err != nil {
+			return nil, err
+		}
 	}
 
 	log.Printf("Replace README.md NewClient name...")

@@ -107,13 +107,7 @@ type ClientOptions = policy.ClientOptions
 
 // Client is a basic HTTP client.  It consists of a pipeline and tracing provider.
 type Client struct {
-	pl runtime.Pipeline
-	tr tracing.Tracer
-
-	// cached on the client to support shallow copying with new values
-	tp        tracing.Provider
-	modVer    string
-	namespace string
+	base *runtime.BaseClient[struct{}]
 }
 
 // NewClient creates a new Client instance with the provided values.
@@ -122,49 +116,29 @@ type Client struct {
 //   - plOpts - pipeline configuration options; can be the zero-value
 //   - options - optional client configurations; pass nil to accept the default values
 func NewClient(moduleName, moduleVersion string, plOpts runtime.PipelineOptions, options *ClientOptions) (*Client, error) {
-	if options == nil {
-		options = &ClientOptions{}
+	base, err := runtime.NewBaseClient[struct{}]("", moduleName, moduleVersion, plOpts, struct{}{}, options)
+	if err != nil {
+		return nil, err
 	}
-
-	if !options.Telemetry.Disabled {
-		if err := shared.ValidateModVer(moduleVersion); err != nil {
-			return nil, err
-		}
-	}
-
-	pl := runtime.NewPipeline(moduleName, moduleVersion, plOpts, options)
-
-	tr := options.TracingProvider.NewTracer(moduleName, moduleVersion)
-	if tr.Enabled() && plOpts.Tracing.Namespace != "" {
-		tr.SetAttributes(tracing.Attribute{Key: shared.TracingNamespaceAttrName, Value: plOpts.Tracing.Namespace})
-	}
-
 	return &Client{
-		pl:        pl,
-		tr:        tr,
-		tp:        options.TracingProvider,
-		modVer:    moduleVersion,
-		namespace: plOpts.Tracing.Namespace,
+		base: base,
 	}, nil
 }
 
 // Pipeline returns the pipeline for this client.
 func (c *Client) Pipeline() runtime.Pipeline {
-	return c.pl
+	return c.base.Pipeline()
 }
 
 // Tracer returns the tracer for this client.
 func (c *Client) Tracer() tracing.Tracer {
-	return c.tr
+	return c.base.Tracer()
 }
 
 // WithClientName returns a shallow copy of the Client with its tracing client name changed to clientName.
 // Note that the values for module name and version will be preserved from the source Client.
 //   - clientName - the fully qualified name of the client ("package.Client"); this is used by the tracing provider when creating spans
 func (c *Client) WithClientName(clientName string) *Client {
-	tr := c.tp.NewTracer(clientName, c.modVer)
-	if tr.Enabled() && c.namespace != "" {
-		tr.SetAttributes(tracing.Attribute{Key: shared.TracingNamespaceAttrName, Value: c.namespace})
-	}
-	return &Client{pl: c.pl, tr: tr, tp: c.tp, modVer: c.modVer, namespace: c.namespace}
+	base := c.base.WithClientName(clientName)
+	return &Client{base: base}
 }

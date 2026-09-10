@@ -110,7 +110,6 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 		setIMDSRetryOptionDefaults(&cp.Retry)
 	}
 
-	httpClientOption := managedidentity.WithHTTPClient(&c)
 	if source == managedidentity.ServiceFabric {
 		if cp.Transport != nil {
 			// This source has MSAL pin the base client, so a caller-supplied Transport must be an
@@ -121,14 +120,10 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 				return nil, errors.New(credNameManagedIdentity + ": Service Fabric managed identity requires ClientOptions.Transport to be an *http.Client")
 			}
 			c.configurableClient.client = base
-		} else {
-			// no caller provided transport so use our default
-			c.configurableClient.client = transport.DefaultHTTPClient
 		}
 		// Install a client MSAL configures (see ConfigureTransport) at the bottom of the pipeline,
 		// so certificate verification and the redirect policy apply without discarding middleware.
 		cp.Transport = &c.configurableClient
-		httpClientOption = managedidentity.WithConfigurableHTTPClient(&c)
 	}
 
 	c.azClient, err = azcore.NewClient(module, version, azruntime.PipelineOptions{
@@ -152,7 +147,7 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 			id = managedidentity.UserAssignedResourceID(s)
 		}
 	}
-	msalClient, err := managedidentity.New(id, httpClientOption, managedidentity.WithRetryPolicyDisabled())
+	msalClient, err := managedidentity.New(id, managedidentity.WithHTTPClient(&c), managedidentity.WithRetryPolicyDisabled())
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +184,12 @@ func (c *managedIdentityClient) Do(r *http.Request) (*http.Response, error) {
 // Transport as the base (or the SDK default when none was set) and installs the augmented client at
 // the bottom of the pipeline, preserving the azcore middleware above.
 func (c *managedIdentityClient) ConfigureClient(augment func(*http.Client) (*http.Client, error)) error {
-	client, err := augment(c.configurableClient.client)
+	base := c.configurableClient.client
+	if base == nil {
+		// no caller provided transport so use our default
+		base = transport.DefaultHTTPClient
+	}
+	client, err := augment(base)
 	if err != nil {
 		return err
 	}
@@ -260,3 +260,5 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 	err = newAuthenticationFailedErrorFromMSAL(credNameManagedIdentity, err)
 	return azcore.AccessToken{}, err
 }
+
+var _ managedidentity.ClientConfigurer = (*managedIdentityClient)(nil)

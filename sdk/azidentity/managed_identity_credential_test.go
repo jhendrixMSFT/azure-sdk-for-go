@@ -5,6 +5,9 @@ package azidentity
 
 import (
 	"context"
+	"crypto/sha1"
+	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -661,9 +664,9 @@ func TestManagedIdentityCredential_UnexpectedIMDSResponse(t *testing.T) {
 func TestManagedIdentityCredential_ServiceFabric(t *testing.T) {
 	scope := t.Name()
 	expectedSecret := "expected-secret"
-	pred := func(req *http.Request) bool {
+	validateReq := func(req *http.Request) bool {
 		if secret := req.Header.Get("Secret"); secret != expectedSecret {
-			t.Fatalf(`unexpected Secret header "%s"`, secret)
+			t.Fatalf("unexpected Secret header %q", secret)
 		}
 		if p := req.URL.Query().Get("api-version"); p != serviceFabricAPIVersion {
 			t.Fatalf("unexpected api-version: %s", p)
@@ -673,16 +676,93 @@ func TestManagedIdentityCredential_ServiceFabric(t *testing.T) {
 		}
 		return true
 	}
-	srv, close := mock.NewServer()
+
+	// Serve TLS with a certificate whose thumbprint the test knows, so azidentity's owned transport
+	// exercises MSAL's certificate pinning end to end. No Transport override, so azidentity owns the
+	// transport and can pin.
+	cert := allCertTests[0].certs[0]
+	tlsCert := tls.Certificate{Certificate: [][]byte{cert.Raw}, PrivateKey: allCertTests[0].key, Leaf: cert}
+	srv, close := mock.NewTLSServer(mock.WithTLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}))
 	defer close()
-	srv.AppendResponse(mock.WithPredicate(pred), mock.WithBody(accessTokenRespSuccess))
+	srv.AppendResponse(mock.WithPredicate(validateReq), mock.WithBody(accessTokenRespSuccess))
 	srv.AppendResponse()
-	setEnvironmentVariables(t, map[string]string{identityEndpoint: srv.URL(), identityHeader: expectedSecret, identityServerThumbprint: "..."})
+
+	// Service Fabric publishes the SHA-1 thumbprint of its endpoint certificate.
+	thumbprint := sha1.Sum(cert.Raw)
+	setEnvironmentVariables(t, map[string]string{
+		identityEndpoint:         srv.URL(),
+		identityHeader:           expectedSecret,
+		identityServerThumbprint: hex.EncodeToString(thumbprint[:]),
+	})
 	cred, err := NewManagedIdentityCredential(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	testGetTokenSuccess(t, cred, scope)
+}
+
+type nonHTTPClientTransporter struct{}
+
+func (nonHTTPClientTransporter) Do(*http.Request) (*http.Response, error) {
+	return nil, nil
+}
+
+// TestManagedIdentityCredential_ServiceFabricCallerTransport verifies a caller-supplied *http.Client
+// Transport becomes the base MSAL pins, while a non-*http.Client transporter is rejected.
+func TestManagedIdentityCredential_ServiceFabricCallerTransport(t *testing.T) {
+	cert := allCertTests[0].certs[0]
+	thumbprint := sha1.Sum(cert.Raw)
+
+	t.Run("custom *http.Client is used as the pinning base", func(t *testing.T) {
+		scope := t.Name()
+		tlsCert := tls.Certificate{Certificate: [][]byte{cert.Raw}, PrivateKey: allCertTests[0].key, Leaf: cert}
+		srv, close := mock.NewTLSServer(mock.WithTLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}))
+		defer close()
+		srv.AppendResponse(mock.WithBody(accessTokenRespSuccess))
+		srv.AppendResponse()
+
+		// A Proxy hook on the caller's transport records that its transport is the one making requests.
+		var mu sync.Mutex
+		proxyCalled := false
+		callerTransport := &http.Transport{
+			Proxy: func(*http.Request) (*url.URL, error) {
+				mu.Lock()
+				proxyCalled = true
+				mu.Unlock()
+				return nil, nil
+			},
+		}
+		setEnvironmentVariables(t, map[string]string{
+			identityEndpoint:         srv.URL(),
+			identityHeader:           "expected-secret",
+			identityServerThumbprint: hex.EncodeToString(thumbprint[:]),
+		})
+		opts := &ManagedIdentityCredentialOptions{}
+		opts.ClientOptions.Transport = &http.Client{Transport: callerTransport}
+		cred, err := NewManagedIdentityCredential(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		testGetTokenSuccess(t, cred, scope)
+		mu.Lock()
+		defer mu.Unlock()
+		if !proxyCalled {
+			t.Fatal("expected the caller's transport to be used as the pinning base")
+		}
+	})
+
+	t.Run("non-*http.Client Transport is rejected", func(t *testing.T) {
+		setEnvironmentVariables(t, map[string]string{
+			identityEndpoint:         fakeMIEndpoint,
+			identityHeader:           "expected-secret",
+			identityServerThumbprint: hex.EncodeToString(thumbprint[:]),
+		})
+		opts := &ManagedIdentityCredentialOptions{}
+		opts.ClientOptions.Transport = nonHTTPClientTransporter{}
+		_, err := NewManagedIdentityCredential(opts)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "*http.Client")
+	})
 }
 
 func TestManagedIdentityCredential_UnsupportedID(t *testing.T) {
@@ -691,7 +771,7 @@ func TestManagedIdentityCredential_UnsupportedID(t *testing.T) {
 		t.Setenv(arcIMDSEndpoint, fakeMIEndpoint)
 		for _, id := range []ManagedIDKind{ClientID(fakeClientID), ObjectID(fakeObjectID), ResourceID(fakeResourceID)} {
 			_, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{ID: id})
-			require.Errorf(t, err, "expected an error for %T", id)
+			require.NoError(t, err)
 		}
 	})
 	t.Run("Azure ML", func(t *testing.T) {

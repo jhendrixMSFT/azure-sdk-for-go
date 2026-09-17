@@ -18,6 +18,7 @@
   * `--debug` for additional diagnostic output.
   * `--sync`, `--insecure`, `--max-io-completion-threads`, `--max-worker-threads`, `--min-io-completion-threads`, and `--min-worker-threads` are accepted for CLI parity with the .NET runner.
 * The `perf` runner now samples process CPU and memory usage in the background, displaying them in the live status line and including `averageCpuPercent` / `averageMemoryBytes` in run-summary artifacts.
+* Added the `transport` package and containing types.
 
 ### Breaking Changes
 

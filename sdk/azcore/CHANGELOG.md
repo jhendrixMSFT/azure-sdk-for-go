@@ -7,6 +7,7 @@
 * Added `tracing.WrapTracer` to decorate a tracer while preserving attribute override ordering.
 * Added supporting infrastructure for SSE responses.  This includes streaming types, runtime support, and fakes.
 * Added `arm.ResourceID.ValidateResourceTypeChain` to validate complete resource-type ancestry.
+* Added an Azure Policy external evaluation policy that detects actionable denials, acquires a policy token, and replays the operation once without reserializing its body. Enabled by default in ARM pipelines; set `arm/policy.ClientOptions.DisableExternalEvaluation` to disable it.
 
 ### Breaking Changes
 

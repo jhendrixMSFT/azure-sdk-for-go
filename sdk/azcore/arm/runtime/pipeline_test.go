@@ -5,6 +5,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,10 +15,12 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	armpolicy "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -134,6 +137,87 @@ func TestDisableAutoRPRegistration(t *testing.T) {
 	if logEntries != 0 {
 		t.Fatalf("expected 0 log entries, got %d", logEntries)
 	}
+}
+
+func TestPipelineExternalEvaluation(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		disabled bool
+	}{
+		{name: "enabled by default"},
+		{name: "disabled", disabled: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, close := mock.NewTLSServer()
+			defer close()
+			srv.AppendResponse(mock.WithStatusCode(http.StatusForbidden), mock.WithBody([]byte(externalEvaluationDenied)))
+			srv.AppendResponse(mock.WithBody([]byte(`{"result":"Succeeded","token":"PoP token"}`)))
+			srv.AppendResponse(mock.WithStatusCode(http.StatusOK))
+			opts := &armpolicy.ClientOptions{
+				DisableExternalEvaluation: tt.disabled,
+				ClientOptions:             policy.ClientOptions{Transport: srv},
+			}
+			pl, err := NewPipeline("armtest", "v1.2.3", mockCredential{}, azruntime.PipelineOptions{}, opts)
+			require.NoError(t, err)
+			req, err := azruntime.NewRequest(context.Background(), http.MethodPut,
+				srv.URL()+"/subscriptions/sub/providers/Microsoft.Test/widgets/widget?api-version=2025-01-01")
+			require.NoError(t, err)
+			require.NoError(t, req.SetBody(streaming.NopCloser(strings.NewReader(`{"name":"widget"}`)), "application/json"))
+			resp, err := pl.Do(req)
+			require.NoError(t, err)
+			if tt.disabled {
+				require.Equal(t, http.StatusForbidden, resp.StatusCode)
+				require.Equal(t, 1, srv.Requests(), "disabled policy must not acquire a token or replay")
+				require.Empty(t, req.Raw().Header.Get("x-ms-policy-external-evaluations"))
+				body, err := azruntime.Payload(resp)
+				require.NoError(t, err)
+				require.Equal(t, externalEvaluationDenied, string(body))
+			} else {
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+				require.Equal(t, 3, srv.Requests())
+				require.Equal(t, "PoP token", req.Raw().Header.Get("x-ms-policy-external-evaluations"))
+			}
+		})
+	}
+}
+
+func TestPipelineExternalEvaluationOptions(t *testing.T) {
+	var acquisitionRequests int
+	transport := externalEvaluationTransport(func(req *http.Request) (*http.Response, error) {
+		acquisitionRequests++
+		require.Equal(t, "2025-11-01", req.URL.Query().Get("api-version"))
+		require.NotEmpty(t, req.Header.Get(headerAuxiliaryAuthorization))
+		return nil, errors.New("stop after verifying acquisition options")
+	})
+	opts := &armpolicy.ClientOptions{
+		AuxiliaryTenants: []string{"auxiliary-tenant"},
+		ClientOptions: policy.ClientOptions{
+			APIVersion: "2099-01-01",
+			Retry:      policy.RetryOptions{MaxRetries: -1},
+			Transport:  transport,
+			PerRetryPolicies: []policy.Policy{exported.PolicyFunc(func(req *policy.Request) (*http.Response, error) {
+				if strings.HasSuffix(req.Raw().URL.Path, "/acquirePolicyToken") {
+					return req.Next()
+				}
+				require.Equal(t, "2099-01-01", req.Raw().URL.Query().Get("api-version"))
+				return &http.Response{
+					StatusCode: http.StatusForbidden,
+					Header:     http.Header{},
+					Body:       streaming.NopCloser(strings.NewReader(externalEvaluationDenied)),
+					Request:    req.Raw(),
+				}, nil
+			})},
+		},
+	}
+	pl, err := NewPipeline("armtest", "v1.2.3", mockCredential{}, azruntime.PipelineOptions{}, opts)
+	require.NoError(t, err)
+	req, err := azruntime.NewRequest(context.Background(), http.MethodPut,
+		"https://management.azure.com/subscriptions/sub/providers/Microsoft.Test/widgets/widget")
+	require.NoError(t, err)
+	_, err = pl.Do(req)
+	require.ErrorContains(t, err, "stop after verifying acquisition options")
+	require.Equal(t, 1, acquisitionRequests)
+	require.Equal(t, "2099-01-01", opts.APIVersion, "pipeline must not mutate caller's API version")
 }
 
 // policy that tracks the number of times it was invoked

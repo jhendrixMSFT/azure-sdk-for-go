@@ -53,6 +53,20 @@ type RegistrationOptions struct {
 	StatusCodes []int
 }
 
+// ExternalEvaluationOptions configures the external evaluation policy's behavior.
+// ClientOptions.APIVersion overrides the acquirePolicyToken API version, which
+// defaults to 2025-11-01. Request and response body logging is disabled for token acquisition.
+type ExternalEvaluationOptions struct {
+	policy.ClientOptions
+
+	// TODO: Confirm acquirePolicyToken's auxiliary-token requirements before finalizing this field.
+	// AuxiliaryTenants are additional tenant IDs for authenticating cross-tenant requests.
+	// The policy will add a token from each of these tenants to token acquisition requests.
+	// The authenticating user or service principal must be a guest in these tenants, and
+	// the policy's credential must support multitenant authentication.
+	AuxiliaryTenants []string
+}
+
 // ClientOptions contains configuration settings for a client's pipeline.
 type ClientOptions struct {
 	policy.ClientOptions
@@ -62,6 +76,10 @@ type ClientOptions struct {
 	// authenticating user or service principal must be a guest in these tenants, and the
 	// client's credential must support multitenant authentication.
 	AuxiliaryTenants []string
+
+	// DisableExternalEvaluation disables automatic acquisition of Azure Policy external
+	// evaluation tokens and replay of the guarded operation. Defaults to false.
+	DisableExternalEvaluation bool
 
 	// DisableRPRegistration disables the auto-RP registration policy. Defaults to false.
 	DisableRPRegistration bool

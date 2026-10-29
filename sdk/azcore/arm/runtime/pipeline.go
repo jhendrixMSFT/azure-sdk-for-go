@@ -36,17 +36,34 @@ func NewPipeline(module, version string, cred azcore.TokenCredential, plOpts azr
 	copy(perRetry, plOpts.PerRetry)
 	perRetry = append(perRetry, authPolicy, exported.PolicyFunc(httpTraceNamespacePolicy))
 	plOpts.PerRetry = perRetry
+	if !options.DisableRPRegistration || !options.DisableExternalEvaluation {
+		// we don't want to modify the underlying array in plOpts.PerCall
+		perCall := make([]azpolicy.Policy, len(plOpts.PerCall), len(plOpts.PerCall)+2)
+		copy(perCall, plOpts.PerCall)
+		plOpts.PerCall = perCall
+	}
 	if !options.DisableRPRegistration {
 		regRPOpts := armpolicy.RegistrationOptions{ClientOptions: options.ClientOptions}
 		regPolicy, err := NewRPRegistrationPolicy(cred, &regRPOpts)
 		if err != nil {
 			return azruntime.Pipeline{}, err
 		}
-		// we don't want to modify the underlying array in plOpts.PerCall
-		perCall := make([]azpolicy.Policy, len(plOpts.PerCall), len(plOpts.PerCall)+1)
-		copy(perCall, plOpts.PerCall)
-		perCall = append(perCall, regPolicy)
-		plOpts.PerCall = perCall
+		plOpts.PerCall = append(plOpts.PerCall, regPolicy)
+	}
+	if !options.DisableExternalEvaluation {
+		// TODO: Confirm with the service whether acquirePolicyToken needs auxiliary
+		// authentication; the policy query's single-subscription scope doesn't settle this.
+		evaluationOpts := armpolicy.ExternalEvaluationOptions{
+			ClientOptions:    options.ClientOptions,
+			AuxiliaryTenants: options.AuxiliaryTenants,
+		}
+		// The service client's API version doesn't apply to acquirePolicyToken.
+		evaluationOpts.APIVersion = ""
+		evaluationPolicy, err := NewExternalEvaluationPolicy(cred, &evaluationOpts)
+		if err != nil {
+			return azruntime.Pipeline{}, err
+		}
+		plOpts.PerCall = append(plOpts.PerCall, evaluationPolicy)
 	}
 	if plOpts.APIVersion.Name == "" {
 		plOpts.APIVersion.Name = "api-version"

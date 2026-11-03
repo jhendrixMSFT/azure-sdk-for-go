@@ -4,6 +4,8 @@
 
 ### Features Added
 
+* Added `policy.WithForceTokenRefresh` and `policy.TokenRequestOptions.ForceRefresh` to request token acquisition without the bearer token policy's refresh backoff.
+
 ### Breaking Changes
 
 ### Bugs Fixed

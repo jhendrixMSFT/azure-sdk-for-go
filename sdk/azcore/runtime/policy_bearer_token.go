@@ -79,6 +79,9 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 		}
 	}
 	mr := temporal.NewResourceWithOptions(acquire, temporal.ResourceOptions[exported.AccessToken, acquiringResourceState]{
+		ForceRefresh: func(state acquiringResourceState) bool {
+			return state.tro.ForceRefresh
+		},
 		ShouldRefresh: shouldRefresh,
 	})
 	return &BearerTokenPolicy{
@@ -94,6 +97,9 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(policy.TokenRequestOptions) error {
 	return func(tro policy.TokenRequestOptions) error {
 		tro.EnableCAE = true
+		if req.Raw().Context().Value(shared.CtxWithForceTokenRefresh{}) != nil {
+			tro.ForceRefresh = true
+		}
 		as := acquiringResourceState{p: b, req: req, tro: tro}
 		tk, err := b.mainResource.Get(as)
 		if err != nil {

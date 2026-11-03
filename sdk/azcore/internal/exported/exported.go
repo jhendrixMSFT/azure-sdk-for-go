@@ -67,6 +67,9 @@ type TokenRequestOptions struct {
 	// in a loop retrying an API call with a token that has been revoked due to CAE.
 	EnableCAE bool
 
+	// ForceRefresh indicates that a new token be requested instead of using any cached value.
+	ForceRefresh bool
+
 	// Scopes contains the list of permission scopes required for the token.
 	Scopes []string
 

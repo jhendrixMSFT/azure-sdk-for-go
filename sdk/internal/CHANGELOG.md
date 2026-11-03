@@ -1,8 +1,10 @@
 # Release History
 
-## 1.13.1-beta.1 (Unreleased)
+## 1.14.0 (Unreleased)
 
 ### Features Added
+
+* Added `ForceRefresh` to `temporal.ResourceOptions` to require acquisition without refresh backoff and propagate acquisition errors.
 
 ### Breaking Changes
 

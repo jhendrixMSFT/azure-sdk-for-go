@@ -39,6 +39,8 @@ type Resource[TResource, TState any] struct {
 	// shouldRefresh indicates whether the resource should be refreshed before expiration
 	shouldRefresh ShouldRefresh[TResource, TState]
 
+	forceRefresh func(TState) bool
+
 	// acquireResource is the callback function that actually acquires the resource
 	acquireResource AcquireResource[TResource, TState]
 }
@@ -52,6 +54,13 @@ func NewResource[TResource, TState any](ar AcquireResource[TResource, TState]) *
 
 // ResourceOptions contains optional configuration for Resource
 type ResourceOptions[TResource, TState any] struct {
+	// ForceRefresh indicates whether [Resource.Get] must acquire an updated resource.
+	// Forced acquisition bypasses refresh backoff and ShouldRefresh, waits for any
+	// ongoing acquisition to complete, and returns acquisition errors. Each forced
+	// call acquires its own resource, even after waiting for another acquisition. A successful
+	// acquisition updates the cached resource normally. When nil, no refresh is forced.
+	ForceRefresh func(TState) bool
+
 	// ShouldRefresh indicates whether [Resource.Get] should acquire an updated resource despite
 	// the currently held resource not having expired. [Resource.Get] ignores all errors from
 	// refresh attempts triggered by ShouldRefresh returning true, and doesn't call ShouldRefresh
@@ -64,6 +73,7 @@ type ResourceOptions[TResource, TState any] struct {
 // NewResourceWithOptions creates a new Resource that uses the specified AcquireResource for refreshing.
 func NewResourceWithOptions[TResource, TState any](ar AcquireResource[TResource, TState], opts ResourceOptions[TResource, TState]) *Resource[TResource, TState] {
 	r := NewResource(ar)
+	r.forceRefresh = opts.ForceRefresh
 	if opts.ShouldRefresh != nil {
 		r.shouldRefresh = opts.ShouldRefresh
 	}
@@ -71,9 +81,10 @@ func NewResourceWithOptions[TResource, TState any](ar AcquireResource[TResource,
 }
 
 // Get returns the underlying resource.
-// If the resource is fresh, no refresh is performed.
+// Expired resources and forced refreshes require acquisition; otherwise normal refresh backoff applies.
 func (er *Resource[TResource, TState]) Get(state TState) (TResource, error) {
 	now, acquire, expired := time.Now(), false, false
+	force := er.forceRefresh != nil && er.forceRefresh(state)
 
 	// acquire exclusive lock
 	er.cond.L.Lock()
@@ -81,8 +92,8 @@ func (er *Resource[TResource, TState]) Get(state TState) (TResource, error) {
 
 	for {
 		expired = er.expiration.IsZero() || er.expiration.Before(now)
-		if expired {
-			// The resource was never acquired or has expired
+		if expired || force {
+			// Acquisition is required because the resource is missing, expired, or explicitly refreshed.
 			if !er.acquiring {
 				// If another thread/goroutine is not acquiring/updating the resource, this thread/goroutine will do it
 				er.acquiring, acquire = true, true
@@ -123,7 +134,7 @@ func (er *Resource[TResource, TState]) Get(state TState) (TResource, error) {
 			// Update resource & expiration, return the new value
 			resource = newValue
 			er.resource, er.expiration = resource, expiration
-		} else if !expired {
+		} else if !expired && !force {
 			// An eager update failed. Discard the error and return the current--still valid--resource value
 			err = nil
 		}

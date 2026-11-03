@@ -181,6 +181,11 @@ func WithCaptureResponse(parent context.Context, resp **http.Response) context.C
 	return context.WithValue(parent, shared.CtxWithCaptureResponse{}, resp)
 }
 
+// WithForceTokenRefresh forces the bearer token policy to request a new token from its underlying credential.
+func WithForceTokenRefresh(parent context.Context) context.Context {
+	return context.WithValue(parent, shared.CtxWithForceTokenRefresh{}, shared.CtxWithForceTokenRefresh{})
+}
+
 // WithHTTPHeader adds the specified http.Header to the parent context.
 // Use this to specify custom HTTP headers at the API-call level.
 // Any overlapping headers will have their values replaced with the values specified here.

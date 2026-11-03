@@ -165,3 +165,129 @@ func TestShouldRefresh(t *testing.T) {
 		}
 	})
 }
+
+func TestForceRefresh(t *testing.T) {
+	calls := 0
+	r := NewResourceWithOptions(
+		func(bool) (int, time.Time, error) {
+			calls++
+			return calls, time.Now().Add(time.Hour), nil
+		},
+		ResourceOptions[int, bool]{
+			ForceRefresh: func(force bool) bool { return force },
+			ShouldRefresh: func(int, bool) bool {
+				t.Fatal("forced acquisition should bypass ShouldRefresh")
+				return false
+			},
+		},
+	)
+	for _, force := range []bool{false, true, true} {
+		res, err := r.Get(force)
+		require.NoError(t, err)
+		require.Equal(t, calls, res)
+	}
+	require.Equal(t, 3, calls, "forced acquisition should bypass backoff on every call")
+}
+
+func TestForceRefreshError(t *testing.T) {
+	expectedErr := errors.New("refresh failed")
+	calls := 0
+	r := NewResourceWithOptions(
+		func(bool) (string, time.Time, error) {
+			calls++
+			if calls == 2 {
+				return "", time.Time{}, expectedErr
+			}
+			return fmt.Sprint(calls), time.Now().Add(time.Hour), nil
+		},
+		ResourceOptions[string, bool]{
+			ForceRefresh: func(force bool) bool { return force },
+		},
+	)
+	res, err := r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, "1", res)
+
+	_, err = r.Get(true)
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, 2, calls)
+
+	res, err = r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, "1", res, "failed forced acquisition should leave the cached resource intact")
+	require.Equal(t, 2, calls)
+
+	res, err = r.Get(true)
+	require.NoError(t, err)
+	require.Equal(t, "3", res)
+	res, err = r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, "3", res, "normal calls should reuse the refreshed resource")
+	require.Equal(t, 3, calls)
+}
+
+func TestForceRefreshConcurrent(t *testing.T) {
+	const workers = 10
+	started := make(chan struct{}, workers)
+	acquiring := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	calls := 0
+	r := NewResourceWithOptions(
+		func(bool) (int, time.Time, error) {
+			calls++
+			if calls == 2 {
+				close(acquiring)
+				<-release
+			}
+			return calls, time.Now().Add(time.Hour), nil
+		},
+		ResourceOptions[int, bool]{
+			ForceRefresh: func(force bool) bool {
+				if force {
+					started <- struct{}{}
+				}
+				return force
+			},
+		},
+	)
+	res, err := r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, res)
+
+	type result struct {
+		value int
+		err   error
+	}
+	results := make(chan result, workers)
+	for range workers {
+		go func() {
+			value, err := r.Get(true)
+			results <- result{value: value, err: err}
+		}()
+	}
+	for range workers {
+		<-started
+	}
+	<-acquiring
+	res, err = r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, 1, res, "normal calls should reuse the cached resource during forced acquisition")
+	unblock()
+
+	values := make(map[int]bool, workers)
+	for range workers {
+		result := <-results
+		require.NoError(t, result.err)
+		require.Greater(t, result.value, 1, "forced calls must not return the old resource")
+		require.False(t, values[result.value], "each forced call should acquire its own resource")
+		values[result.value] = true
+	}
+	require.Len(t, values, workers)
+	require.Equal(t, workers+1, calls)
+	res, err = r.Get(false)
+	require.NoError(t, err)
+	require.Equal(t, workers+1, res)
+}

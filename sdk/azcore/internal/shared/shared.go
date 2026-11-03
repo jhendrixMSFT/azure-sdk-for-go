@@ -16,6 +16,9 @@ import (
 // NOTE: when adding a new context key type, it likely needs to be
 // added to the deny-list of key types in ContextWithDeniedValues
 
+// CtxWithForceTokenRefresh is used as a context key for enabling a forced token refresh.
+type CtxWithForceTokenRefresh struct{}
+
 // CtxWithHTTPHeaderKey is used as a context key for adding/retrieving http.Header.
 type CtxWithHTTPHeaderKey struct{}
 
@@ -138,7 +141,7 @@ type ContextWithDeniedValues struct {
 // It acts as a deny-list for certain context keys.
 func (c *ContextWithDeniedValues) Value(key any) any {
 	switch key.(type) {
-	case CtxAPINameKey, CtxWithCaptureResponse, CtxWithHTTPHeaderKey, CtxWithRetryOptionsKey, CtxWithTracingTracer:
+	case CtxAPINameKey, CtxWithCaptureResponse, CtxWithForceTokenRefresh, CtxWithHTTPHeaderKey, CtxWithRetryOptionsKey, CtxWithTracingTracer:
 		return nil
 	default:
 		return c.Context.Value(key)

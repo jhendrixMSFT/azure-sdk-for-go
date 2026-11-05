@@ -41,6 +41,10 @@ type acquiringResourceState struct {
 	tro policy.TokenRequestOptions
 }
 
+type bearerTokenPolicyOpValues struct {
+	forceRefreshed bool
+}
+
 // acquire acquires or updates the resource; only one
 // thread/goroutine at a time ever calls this function
 func acquire(state acquiringResourceState) (newResource exported.AccessToken, newExpiration time.Time, err error) {
@@ -97,7 +101,10 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(policy.TokenRequestOptions) error {
 	return func(tro policy.TokenRequestOptions) error {
 		tro.EnableCAE = true
-		if req.Raw().Context().Value(shared.CtxWithForceTokenRefresh{}) != nil {
+		var opValues bearerTokenPolicyOpValues
+		req.OperationValue(&opValues)
+		forceRefresh := req.Raw().Context().Value(shared.CtxWithForceTokenRefresh{}) != nil && !opValues.forceRefreshed
+		if forceRefresh {
 			tro.ForceRefresh = true
 		}
 		as := acquiringResourceState{p: b, req: req, tro: tro}
@@ -106,6 +113,10 @@ func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(p
 			// consider this error non-retriable because if it could be resolved by
 			// retrying authentication, the credential would have done so already
 			return errorinfo.NonRetriableError(err)
+		}
+		if forceRefresh {
+			opValues.forceRefreshed = true
+			req.SetOperationValue(opValues)
 		}
 		req.Raw().Header.Set(shared.HeaderAuthorization, shared.BearerTokenPrefix+tk.Token)
 		return nil

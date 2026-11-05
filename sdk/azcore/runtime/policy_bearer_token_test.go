@@ -751,6 +751,76 @@ func TestBearerTokenPolicy_ForceRefresh(t *testing.T) {
 	}
 }
 
+func TestBearerTokenPolicy_ForceRefreshRetries(t *testing.T) {
+	for _, tryTimeout := range []time.Duration{0, time.Minute} {
+		t.Run(fmt.Sprintf("TryTimeout=%v", tryTimeout), func(t *testing.T) {
+			calls := 0
+			cred := mockCredential{getTokenImpl: func(_ context.Context, options policy.TokenRequestOptions) (exported.AccessToken, error) {
+				calls++
+				require.Equal(t, calls > 1, options.ForceRefresh)
+				return exported.AccessToken{Token: fmt.Sprint(calls), ExpiresOn: time.Now().Add(time.Hour)}, nil
+			}}
+			srv, close := mock.NewTLSServer()
+			defer close()
+			expectedToken := "1"
+			b := NewBearerTokenPolicy(cred, []string{scope}, nil)
+			pl := newTestPipeline(&policy.ClientOptions{
+				Transport: shared.TransportFunc(func(req *http.Request) (*http.Response, error) {
+					require.Equal(t, shared.BearerTokenPrefix+expectedToken, req.Header.Get(shared.HeaderAuthorization))
+					return srv.Do(req)
+				}),
+				PerRetryPolicies: []policy.Policy{b},
+				Retry: policy.RetryOptions{
+					MaxRetries: 2,
+					RetryDelay: time.Millisecond,
+					TryTimeout: tryTimeout,
+				},
+			})
+			forceCtx := policy.WithForceTokenRefresh(context.Background())
+			for i, ctx := range []context.Context{context.Background(), forceCtx, forceCtx, context.Background()} {
+				if i == 1 || i == 2 {
+					expectedToken = fmt.Sprint(i + 1)
+					srv.RepeatResponse(2, mock.WithStatusCode(http.StatusServiceUnavailable))
+				}
+				srv.AppendResponse(mock.WithStatusCode(http.StatusOK))
+				req, err := NewRequest(ctx, http.MethodGet, srv.URL())
+				require.NoError(t, err)
+				resp, err := pl.Do(req)
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+			}
+			require.Equal(t, 3, calls, "each new request should force a refresh once, even when reusing the context")
+			require.Equal(t, 8, srv.Requests(), "both forced requests should retry twice")
+		})
+	}
+}
+
+func TestBearerTokenPolicy_ForceRefreshFailureRemainsPending(t *testing.T) {
+	expectedErr := errors.New("refresh failed")
+	calls := 0
+	b := NewBearerTokenPolicy(mockCredential{getTokenImpl: func(_ context.Context, options policy.TokenRequestOptions) (exported.AccessToken, error) {
+		calls++
+		require.True(t, options.ForceRefresh, "failed acquisition must not consume the refresh request")
+		if calls == 1 {
+			return exported.AccessToken{}, expectedErr
+		}
+		return exported.AccessToken{Token: fmt.Sprint(calls), ExpiresOn: time.Now().Add(time.Hour)}, nil
+	}}, []string{scope}, nil)
+	req, err := NewRequest(policy.WithForceTokenRefresh(context.Background()), http.MethodGet, "https://localhost")
+	require.NoError(t, err)
+	err = b.authenticateAndAuthorize(req)(policy.TokenRequestOptions{Scopes: []string{scope}})
+	require.ErrorIs(t, err, expectedErr)
+	require.Empty(t, req.Raw().Header.Get(shared.HeaderAuthorization))
+	for range 2 {
+		clone := req.Clone(req.Raw().Context())
+		err = b.authenticateAndAuthorize(clone)(policy.TokenRequestOptions{Scopes: []string{scope}})
+		require.NoError(t, err)
+		require.Equal(t, shared.BearerTokenPrefix+"2", clone.Raw().Header.Get(shared.HeaderAuthorization))
+	}
+	require.Equal(t, 2, calls, "only successful acquisition should consume the refresh request")
+}
+
 func TestCheckHTTPSForAuth(t *testing.T) {
 	req, err := NewRequest(context.Background(), http.MethodGet, "http://contoso.com")
 	require.NoError(t, err)

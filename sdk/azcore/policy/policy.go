@@ -182,6 +182,8 @@ func WithCaptureResponse(parent context.Context, resp **http.Response) context.C
 }
 
 // WithForceTokenRefresh forces the bearer token policy to request a new token from its underlying credential.
+// Once token acquisition succeeds, retries no longer force a refresh.
+// Each new request using the returned context forces its own refresh.
 func WithForceTokenRefresh(parent context.Context) context.Context {
 	return context.WithValue(parent, shared.CtxWithForceTokenRefresh{}, shared.CtxWithForceTokenRefresh{})
 }

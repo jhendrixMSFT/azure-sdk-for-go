@@ -4,7 +4,7 @@
 
 ### Features Added
 
-* Added `policy.WithForceTokenRefresh` and `policy.TokenRequestOptions.ForceRefresh` to request token acquisition without the bearer token policy's refresh backoff.
+* Added `policy.WithForceTokenRefresh` and `policy.TokenRequestOptions.ForceRefresh` to request token acquisition without the bearer token policy's refresh backoff. Context-based refreshes are forced only once per request, not once per retry.
 
 ### Breaking Changes
 

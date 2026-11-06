@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -20,7 +21,8 @@ type mtlsRequest struct {
 }
 
 // Each certificate gets its own connection pool so rotation never reuses a connection
-// authenticated with an old certificate. The cache is bounded across rotations.
+// authenticated with an old certificate. Unauthenticated challenges use a separate pool
+// keyed by nil. The cache is bounded across rotations.
 type mtlsPolicy struct {
 	base    policy.Transporter
 	mu      sync.Mutex
@@ -37,8 +39,15 @@ func (p *mtlsPolicy) prepare(req *policy.Request) (*http.Response, error) {
 
 func (p *mtlsPolicy) Do(req *policy.Request) (*http.Response, error) {
 	var mtls mtlsRequest
-	if !req.OperationValue(&mtls) || mtls.certificate == nil {
+	if !req.OperationValue(&mtls) || !mtls.enabled {
 		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
+	}
+	if mtls.certificate == nil {
+		for header := range req.Raw().Header {
+			if strings.EqualFold(header, "Authorization") || strings.EqualFold(header, "x-ms-tokenboundauth") {
+				return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
+			}
+		}
 	}
 	client, err := p.client(mtls.certificate)
 	if err != nil {
@@ -53,7 +62,7 @@ func (p *mtlsPolicy) client(cert *tls.Certificate) (*http.Client, error) {
 	if client := p.clients[cert]; client != nil {
 		return client, nil
 	}
-	if len(cert.Certificate) == 0 || cert.PrivateKey == nil {
+	if cert != nil && (len(cert.Certificate) == 0 || cert.PrivateKey == nil) {
 		return nil, errors.New("mTLS PoP requires a certificate with a private key")
 	}
 	base := p.base
@@ -91,6 +100,9 @@ func (p *mtlsPolicy) client(cert *tls.Certificate) (*http.Client, error) {
 	// A shared session cache could resume a session authenticated with a different certificate.
 	config.ClientSessionCache = nil
 	config.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		if cert == nil {
+			return &tls.Certificate{}, nil
+		}
 		return cert, nil
 	}
 	config.NextProtos = []string{"http/1.1"}

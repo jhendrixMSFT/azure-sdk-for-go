@@ -41,6 +41,7 @@ type ClientOptions struct {
 	// This requires TLS 1.2 with client renegotiation. Transport must be nil or an *http.Client
 	// with a nil Transport or a standard *http.Transport without custom TLS dialing.
 	// Redirects are rejected. Unsupported configurations fail rather than falling back to bearer tokens.
+	// Initial unauthenticated challenge requests are sent without a client certificate.
 	EnableMTLSPoP bool
 
 	// InsecureAllowCredentialWithHTTP enables authenticated requests over HTTP.

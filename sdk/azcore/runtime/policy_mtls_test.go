@@ -92,6 +92,120 @@ func TestMTLSPoPResourcePipeline(t *testing.T) {
 	assert.Equal(t, int32(2), acquisitions.Load(), "bound tokens should be cached")
 }
 
+func TestMTLSPoPChallengeAuthentication(t *testing.T) {
+	for _, bound := range []bool{true, false} {
+		name := "bound token"
+		if !bound {
+			name = "unbound token"
+		}
+		t.Run(name, func(t *testing.T) {
+			var requests atomic.Int32
+			var cert tls.Certificate
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, uint16(tls.VersionTLS12), r.TLS.Version)
+				if requests.Add(1) == 1 {
+					assert.Empty(t, r.Header.Get("Authorization"))
+					assert.Empty(t, r.Header.Get("x-ms-tokenboundauth"))
+					assert.Empty(t, r.TLS.PeerCertificates, "the challenge must not use a caller-configured certificate")
+					w.Header().Set("WWW-Authenticate", `Bearer resource="https://example.com"`)
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				assert.Equal(t, "mtls_pop "+tokenValue, r.Header.Get("Authorization"))
+				assert.Equal(t, "true", r.Header.Get("x-ms-tokenboundauth"))
+				if assert.Len(t, r.TLS.PeerCertificates, 1) {
+					assert.Equal(t, cert.Certificate[0], r.TLS.PeerCertificates[0].Raw)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequestClientCert}
+			server.StartTLS()
+			defer server.Close()
+			cert = server.TLS.Certificates[0]
+			base := server.Client()
+			tr, ok := base.Transport.(*http.Transport)
+			require.True(t, ok)
+			tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
+			tr.TLSClientConfig.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				return &cert, nil
+			}
+			var acquisitions int
+			cred := mockCredential{getTokenImpl: func(_ context.Context, opts policy.TokenRequestOptions) (exported.AccessToken, error) {
+				acquisitions++
+				assert.True(t, opts.EnableMTLSPoP)
+				assert.True(t, opts.EnableCAE)
+				assert.Equal(t, []string{scope}, opts.Scopes)
+				token := exported.AccessToken{Token: tokenValue, ExpiresOn: time.Now().Add(time.Hour)}
+				if bound {
+					token.BindingCertificate = &cert
+				}
+				return token, nil
+			}}
+			challenged := false
+			p := NewPipeline("test", "v1.0.0", PipelineOptions{
+				PerRetry: []policy.Policy{NewBearerTokenPolicy(cred, nil, &policy.BearerTokenOptions{
+					AuthorizationHandler: policy.AuthorizationHandler{
+						OnRequest: func(_ *policy.Request, authNZ func(policy.TokenRequestOptions) error) error {
+							if !challenged {
+								return nil
+							}
+							return authNZ(policy.TokenRequestOptions{Scopes: []string{scope}})
+						},
+						OnChallenge: func(_ *policy.Request, _ *http.Response, authNZ func(policy.TokenRequestOptions) error) error {
+							challenged = true
+							return authNZ(policy.TokenRequestOptions{Scopes: []string{scope}})
+						},
+					},
+				})},
+			}, &policy.ClientOptions{EnableMTLSPoP: true, Transport: base})
+			for range 2 {
+				req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
+				require.NoError(t, err)
+				resp, err := p.Do(req)
+				if !bound {
+					require.ErrorContains(t, err, "no binding certificate")
+					assert.Equal(t, int32(1), requests.Load(), "an unbound token must never reach the resource")
+					assert.Equal(t, 1, acquisitions)
+					return
+				}
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+			}
+			assert.Equal(t, int32(3), requests.Load(), "one challenge followed by two authenticated requests")
+			assert.Equal(t, 1, acquisitions, "the bound token should be cached")
+			assert.Len(t, tr.TLSClientConfig.Certificates, 1, "the caller's transport must not be modified")
+		})
+	}
+}
+
+func TestMTLSPoPRejectsAuthenticationWithoutCertificate(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	defer server.Close()
+	for _, headers := range []http.Header{
+		{"Authorization": {"Bearer " + tokenValue}},
+		{"Authorization": {"mtls_pop " + tokenValue}},
+		{"Authorization": {""}},
+		{"Authorization": {"", "Bearer " + tokenValue}},
+		{"authorization": {"Bearer " + tokenValue}},
+		{"x-ms-tokenboundauth": {"true"}},
+	} {
+		p := NewPipeline("test", "v1.0.0", PipelineOptions{}, &policy.ClientOptions{
+			EnableMTLSPoP: true, Transport: server.Client(),
+		})
+		req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
+		require.NoError(t, err)
+		req.Raw().Header = headers
+		resp, err := p.Do(req)
+		require.ErrorContains(t, err, "binding certificate")
+		require.Nil(t, resp)
+	}
+	assert.Zero(t, requests.Load())
+}
+
 func TestMTLSPoPRejectsDowngrade(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
@@ -171,6 +285,21 @@ func TestMTLSPoPTransport(t *testing.T) {
 	assert.Nil(t, tr.TLSClientConfig.ClientSessionCache, "session resumption must not cross certificate boundaries")
 	assert.Same(t, sessionCache, baseTransport.TLSClientConfig.ClientSessionCache)
 	assert.Error(t, client.CheckRedirect(nil, nil))
+	challenge, err := p.client(nil)
+	require.NoError(t, err)
+	t.Cleanup(challenge.CloseIdleConnections)
+	assert.NotSame(t, client, challenge, "a challenge must not reuse a certificate-authenticated connection")
+	challengeTransport, ok := challenge.Transport.(*http.Transport)
+	require.True(t, ok)
+	got, err = challengeTransport.TLSClientConfig.GetClientCertificate(&tls.CertificateRequestInfo{})
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Empty(t, got.Certificate)
+	assert.Nil(t, got.PrivateKey)
+	assert.Nil(t, challengeTransport.TLSClientConfig.ClientSessionCache)
+	cached, err = p.client(nil)
+	require.NoError(t, err)
+	assert.Same(t, challenge, cached)
 	for range 10 {
 		copy := cert
 		rotated, err := p.client(&copy)
@@ -198,8 +327,10 @@ func TestMTLSPoPUnsupportedConfiguration(t *testing.T) {
 		{name: "TLS 1.3 only", base: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}}}, message: "TLS 1.2"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := (&mtlsPolicy{base: tc.base}).client(cert)
-			require.ErrorContains(t, err, tc.message)
+			for _, binding := range []*tls.Certificate{nil, cert} {
+				_, err := (&mtlsPolicy{base: tc.base}).client(binding)
+				require.ErrorContains(t, err, tc.message)
+			}
 		})
 	}
 	p := NewPipeline("test", "v1.0.0", PipelineOptions{}, &policy.ClientOptions{
@@ -229,13 +360,15 @@ func TestMTLSPoPRedirect(t *testing.T) {
 	defer server.Close()
 	cert := server.TLS.Certificates[0]
 	p := &mtlsPolicy{base: server.Client()}
-	client, err := p.client(&cert)
-	require.NoError(t, err)
-	defer client.CloseIdleConnections()
-	resp, err := client.Get(server.URL)
-	require.ErrorContains(t, err, "redirects")
-	if resp != nil {
-		require.NoError(t, resp.Body.Close())
+	for _, binding := range []*tls.Certificate{nil, &cert} {
+		client, err := p.client(binding)
+		require.NoError(t, err)
+		defer client.CloseIdleConnections()
+		resp, err := client.Get(server.URL)
+		require.ErrorContains(t, err, "redirects")
+		if resp != nil {
+			require.NoError(t, resp.Body.Close())
+		}
 	}
 	assert.False(t, redirected.Load())
 }
@@ -247,12 +380,14 @@ func TestMTLSPoPRespectsServerTrust(t *testing.T) {
 	p := &mtlsPolicy{base: &http.Client{Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: x509.NewCertPool()},
 	}}}
-	client, err := p.client(&cert)
-	require.NoError(t, err)
-	defer client.CloseIdleConnections()
-	_, err = client.Get(server.URL)
-	var verificationError *tls.CertificateVerificationError
-	require.ErrorAs(t, err, &verificationError)
+	for _, binding := range []*tls.Certificate{nil, &cert} {
+		client, err := p.client(binding)
+		require.NoError(t, err)
+		defer client.CloseIdleConnections()
+		_, err = client.Get(server.URL)
+		var verificationError *tls.CertificateVerificationError
+		require.ErrorAs(t, err, &verificationError)
+	}
 }
 
 func TestMTLSPoPCertificateExpiration(t *testing.T) {

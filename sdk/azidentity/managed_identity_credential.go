@@ -125,6 +125,10 @@ func NewManagedIdentityCredential(options *ManagedIdentityCredentialOptions) (*M
 }
 
 // GetToken requests an access token from the hosting environment. This method is called automatically by Azure SDK clients.
+// When opts.EnableMTLSPoP is true, it requests a certificate-bound token instead of a bearer token.
+// This requires Windows with Credential Guard enabled and IMDSv2 available. The resource must support
+// mTLS PoP. Enable ClientOptions.EnableMTLSPoP on the resource client to present the token and its
+// binding certificate automatically. Unsupported hosts return an error without falling back to bearer authentication.
 func (c *ManagedIdentityCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	var err error
 	ctx, endSpan := runtime.StartSpan(ctx, credNameManagedIdentity+"."+traceOpGetToken, c.mic.azClient.Tracer(), nil)

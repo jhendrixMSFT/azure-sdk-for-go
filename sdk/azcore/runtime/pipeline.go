@@ -70,6 +70,11 @@ func NewPipeline(module, version string, plOpts PipelineOptions, options *policy
 	// we put the includeResponsePolicy at the very beginning so that the raw response
 	// is populated with the final response (some policies might mutate the response)
 	policies := []policy.Policy{exported.PolicyFunc(includeResponsePolicy)}
+	var mtls *mtlsPolicy
+	if cp.EnableMTLSPoP {
+		mtls = &mtlsPolicy{base: cp.Transport}
+		policies = append(policies, exported.PolicyFunc(mtls.prepare))
+	}
 	if cp.APIVersion != "" {
 		policies = append(policies, newAPIVersionPolicy(cp.APIVersion, &plOpts.APIVersion))
 	}
@@ -89,6 +94,9 @@ func NewPipeline(module, version string, plOpts PipelineOptions, options *policy
 	policies = append(policies, newHTTPTracePolicy(sanitizer))
 	policies = append(policies, newLogPolicy(&cp.Logging, sanitizer))
 	policies = append(policies, exported.PolicyFunc(bodyDownloadPolicy))
+	if mtls != nil {
+		policies = append(policies, mtls)
+	}
 	transport := cp.Transport
 	if transport == nil {
 		transport = azt.DefaultHTTPClient

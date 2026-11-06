@@ -36,6 +36,13 @@ type ClientOptions struct {
 	// Cloud specifies a cloud for the client. The default is Azure Public Cloud.
 	Cloud cloud.Configuration
 
+	// EnableMTLSPoP requests certificate-bound tokens and authenticates resource connections
+	// with their binding certificates. The credential and resource must support mTLS PoP.
+	// This requires TLS 1.2 with client renegotiation. Transport must be nil or an *http.Client
+	// with a nil Transport or a standard *http.Transport without custom TLS dialing.
+	// Redirects are rejected. Unsupported configurations fail rather than falling back to bearer tokens.
+	EnableMTLSPoP bool
+
 	// InsecureAllowCredentialWithHTTP enables authenticated requests over HTTP.
 	// By default, authenticated requests to an HTTP endpoint are rejected by the client.
 	// WARNING: setting this to true will allow sending the credential in clear text. Use with caution.

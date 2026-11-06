@@ -28,6 +28,7 @@ import (
 type BearerTokenPolicy struct {
 	// mainResource is the resource to be retreived using the tenant specified in the credential
 	mainResource *temporal.Resource[exported.AccessToken, acquiringResourceState]
+	mtlsResource *temporal.Resource[exported.AccessToken, acquiringResourceState]
 	// the following fields are read-only
 	authzHandler policy.AuthorizationHandler
 	cred         exported.TokenCredential
@@ -48,11 +49,18 @@ func acquire(state acquiringResourceState) (newResource exported.AccessToken, ne
 	if err != nil {
 		return exported.AccessToken{}, time.Time{}, err
 	}
-	return tk, tk.ExpiresOn, nil
+	expiration := tk.ExpiresOn
+	if cert := tk.BindingCertificate; cert != nil && cert.Leaf != nil && cert.Leaf.NotAfter.Before(expiration) {
+		expiration = cert.Leaf.NotAfter
+	}
+	return tk, expiration, nil
 }
 
 // shouldRefresh determines whether the token should be refreshed. It's a variable so tests can replace it.
 var shouldRefresh = func(tk exported.AccessToken, _ acquiringResourceState) bool {
+	if cert := tk.BindingCertificate; cert != nil && cert.Leaf != nil && cert.Leaf.NotAfter.Add(-5*time.Minute).Before(time.Now()) {
+		return true
+	}
 	if tk.RefreshOn.IsZero() {
 		return tk.ExpiresOn.Add(-5 * time.Minute).Before(time.Now())
 	}
@@ -86,7 +94,10 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 		cred:         cred,
 		scopes:       scopes,
 		mainResource: mr,
-		allowHTTP:    opts.InsecureAllowCredentialWithHTTP,
+		mtlsResource: temporal.NewResourceWithOptions(acquire, temporal.ResourceOptions[exported.AccessToken, acquiringResourceState]{
+			ShouldRefresh: shouldRefresh,
+		}),
+		allowHTTP: opts.InsecureAllowCredentialWithHTTP,
 	}
 }
 
@@ -94,14 +105,37 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(policy.TokenRequestOptions) error {
 	return func(tro policy.TokenRequestOptions) error {
 		tro.EnableCAE = true
+		var mtls mtlsRequest
+		req.OperationValue(&mtls)
+		if tro.EnableMTLSPoP && !mtls.enabled {
+			return errorinfo.NonRetriableError(errors.New("mTLS PoP requires ClientOptions.EnableMTLSPoP"))
+		}
+		tro.EnableMTLSPoP = mtls.enabled
 		as := acquiringResourceState{p: b, req: req, tro: tro}
-		tk, err := b.mainResource.Get(as)
+		resource := b.mainResource
+		if mtls.enabled {
+			resource = b.mtlsResource
+		}
+		tk, err := resource.Get(as)
 		if err != nil {
 			// consider this error non-retriable because if it could be resolved by
 			// retrying authentication, the credential would have done so already
 			return errorinfo.NonRetriableError(err)
 		}
-		req.Raw().Header.Set(shared.HeaderAuthorization, shared.BearerTokenPrefix+tk.Token)
+		if mtls.enabled {
+			if tk.BindingCertificate == nil {
+				return errorinfo.NonRetriableError(errors.New("mTLS PoP was requested but the credential returned no binding certificate"))
+			}
+			mtls.certificate = tk.BindingCertificate
+			req.SetOperationValue(mtls)
+			req.Raw().Header.Set(shared.HeaderAuthorization, "mtls_pop "+tk.Token)
+			req.Raw().Header.Set("x-ms-tokenboundauth", "true")
+		} else {
+			if tk.BindingCertificate != nil {
+				return errorinfo.NonRetriableError(errors.New("a certificate-bound token can't be used for bearer authentication"))
+			}
+			req.Raw().Header.Set(shared.HeaderAuthorization, shared.BearerTokenPrefix+tk.Token)
+		}
 		return nil
 	}
 }
@@ -141,6 +175,7 @@ func (b *BearerTokenPolicy) handleChallenge(req *policy.Request, res *http.Respo
 	var err error
 	if res.StatusCode == http.StatusUnauthorized {
 		b.mainResource.Expire()
+		b.mtlsResource.Expire()
 		if res.Header.Get(shared.HeaderWWWAuthenticate) != "" {
 			caeChallenge, parseErr := parseCAEChallenge(res)
 			if parseErr != nil {

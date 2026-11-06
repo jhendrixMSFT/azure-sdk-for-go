@@ -77,6 +77,25 @@ The Azure Arc agent must support user-assigned
 identities and confirm the requested identity in its token response. Otherwise, token acquisition
 fails rather than authenticating the machine's system-assigned identity.
 
+### Managed identity mTLS proof of possession
+
+`ManagedIdentityCredential` can acquire certificate-bound (`mtls_pop`) tokens on Windows virtual
+machines with Credential Guard enabled and IMDSv2 available. The target resource must support
+certificate-bound tokens. Set `EnableMTLSPoP: true` in the **resource client's** embedded
+`azcore.ClientOptions` to request these tokens and automatically present their binding certificates.
+The option isn't needed on the credential's client options.
+
+Resource connections use TLS 1.2 with client-certificate renegotiation. Redirects and ARM auxiliary
+tenant authentication aren't supported. Custom transports for both the credential and resource
+client must be `*http.Client` values with a standard `*http.Transport` (or a nil transport).
+Custom TLS dialing isn't supported. Unsupported hosts, credentials, and transports produce errors
+instead of silently falling back to bearer authentication.
+
+For direct token acquisition, set `policy.TokenRequestOptions.EnableMTLSPoP`. Present the returned
+`AccessToken.BindingCertificate` through `tls.Config.GetClientCertificate`, use the `mtls_pop`
+authorization scheme, and set `x-ms-tokenboundauth: true`. Keep the certificate alive for as long
+as its token and connections are used; don't modify it or close its private key.
+
 ### Service Fabric transport requirements
 
 On Service Fabric, `ManagedIdentityCredential` pins the endpoint certificate to

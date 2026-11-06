@@ -4,6 +4,10 @@
 
 ### Features Added
 
+- Added `TokenRequestOptions.EnableMTLSPoP` and `AccessToken.BindingCertificate` for certificate-bound tokens.
+- Added `ClientOptions.EnableMTLSPoP` for automatic mTLS PoP resource authentication, with
+  certificate-specific connection pools and no fallback to bearer authentication.
+
 ### Breaking Changes
 
 ### Bugs Fixed

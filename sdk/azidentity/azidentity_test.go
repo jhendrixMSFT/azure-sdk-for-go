@@ -1587,10 +1587,14 @@ var _ msalConfidentialClient = (*fakeConfidentialClient)(nil)
 
 type fakeManagedIdentityClient struct {
 	// set ar to have all API calls return the provided AuthResult
-	ar public.AuthResult
+	ar           public.AuthResult
+	acquireToken func(context.Context, string, ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error)
 }
 
-func (f fakeManagedIdentityClient) AcquireToken(context.Context, string, ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+func (f fakeManagedIdentityClient) AcquireToken(ctx context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+	if f.acquireToken != nil {
+		return f.acquireToken(ctx, resource, opts...)
+	}
 	return f.ar, nil
 }
 

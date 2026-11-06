@@ -45,11 +45,13 @@ type managedIdentityClient struct {
 	// a credentialUnavailableError instead of an AuthenticationFailedError for an unexpected IMDS response.
 	chained    bool
 	msalClient msalManagedIdentityClient
-	// configurableClient is set when a source (Service Fabric today, mTLS later) requires MSAL to
+	// configurableClient is set when a source (Service Fabric or mTLS) requires MSAL to
 	// configure the transport. MSAL applies certificate pinning and the redirect policy via
 	// ConfigureClient, preserving the azcore pipeline's middleware. Its client field holds the
 	// caller-supplied base until ConfigureClient replaces it with the augmented client.
 	configurableClient configurableClient
+	clientOptions      azcore.ClientOptions
+	mtlsChild          bool
 }
 
 // setIMDSRetryOptionDefaults sets zero-valued fields to default values appropriate for IMDS
@@ -97,6 +99,8 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 		options = &ManagedIdentityCredentialOptions{}
 	}
 	cp := options.ClientOptions
+	// This option applies to resource requests, not the credential's acquisition pipeline.
+	cp.EnableMTLSPoP = false
 	c := managedIdentityClient{}
 	source, err := managedidentity.GetSource()
 	if err != nil {
@@ -109,6 +113,7 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 		c.probeIMDS = options.dac
 		setIMDSRetryOptionDefaults(&cp.Retry)
 	}
+	c.clientOptions = cp
 
 	if source == managedidentity.ServiceFabric {
 		if cp.Transport != nil {
@@ -171,8 +176,33 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 	return &c, nil
 }
 
-func (*managedIdentityClient) CloseIdleConnections() {
-	// do nothing
+func (c *managedIdentityClient) CloseIdleConnections() {
+	if c.mtlsChild && c.configurableClient.client != nil {
+		c.configurableClient.client.CloseIdleConnections()
+	}
+}
+
+// NewMtlsClient gives MSAL a certificate-scoped pipeline without changing the shared
+// acquisition pipeline or the caller's transport.
+func (c *managedIdentityClient) NewMtlsClient() (managedidentity.ClientConfigurer, error) {
+	child := &managedIdentityClient{mtlsChild: true}
+	cp := c.clientOptions
+	if cp.Transport != nil {
+		base, ok := cp.Transport.(*http.Client)
+		if !ok || base == nil {
+			return nil, errors.New(credNameManagedIdentity + ": mTLS requires ClientOptions.Transport to be an *http.Client")
+		}
+		child.configurableClient.client = base
+	}
+	cp.Transport = &child.configurableClient
+	client, err := azcore.NewClient(module, version, azruntime.PipelineOptions{
+		Tracing: azruntime.TracingOptions{Namespace: traceNamespace},
+	}, &cp)
+	if err != nil {
+		return nil, err
+	}
+	child.azClient = client
+	return child, nil
 }
 
 func (c *managedIdentityClient) Do(r *http.Request) (*http.Response, error) {
@@ -221,11 +251,18 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 		c.probeIMDS = false
 	}
 
-	ar, err := c.msalClient.AcquireToken(ctx, tro.Scopes[0], managedidentity.WithClaims(tro.Claims))
+	opts := []managedidentity.AcquireTokenOption{managedidentity.WithClaims(tro.Claims)}
+	if tro.EnableMTLSPoP {
+		opts = append(opts, managedidentity.WithMtlsProofOfPossession())
+	}
+	ar, err := c.msalClient.AcquireToken(ctx, tro.Scopes[0], opts...)
 	if err == nil {
 		msg := fmt.Sprintf(scopeLogFmt, credNameManagedIdentity, strings.Join(ar.GrantedScopes, ", "))
 		log.Write(EventAuthentication, msg)
-		return azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC(), RefreshOn: ar.Metadata.RefreshOn.UTC()}, err
+		return azcore.AccessToken{
+			Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC(), RefreshOn: ar.Metadata.RefreshOn.UTC(),
+			BindingCertificate: ar.BindingCertificate,
+		}, nil
 	}
 	if c.imds {
 		var ije msalerrors.InvalidJsonErr
@@ -262,3 +299,4 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 }
 
 var _ managedidentity.ClientConfigurer = (*managedIdentityClient)(nil)
+var _ managedidentity.MtlsHTTPClientFactory = (*managedIdentityClient)(nil)

@@ -4,6 +4,11 @@
 
 ### Features Added
 
+- `ManagedIdentityCredential` supports certificate-bound mTLS PoP tokens on Windows hosts with
+  Credential Guard and IMDSv2. Set `policy.TokenRequestOptions.EnableMTLSPoP` when requesting
+  tokens directly, or `ClientOptions.EnableMTLSPoP` on a resource client for automatic token
+  acquisition and mutually authenticated resource requests.
+
 ### Breaking Changes
 
 ### Bugs Fixed

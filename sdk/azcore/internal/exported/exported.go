@@ -5,6 +5,7 @@ package exported
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ func HasStatusCode(resp *http.Response, statusCodes ...int) bool {
 	return false
 }
 
-// AccessToken represents an Azure service bearer access token with expiry information.
+// AccessToken represents an Azure service access token with expiry information.
 // Exported as azcore.AccessToken.
 type AccessToken struct {
 	// Token is the access token
@@ -51,6 +52,11 @@ type AccessToken struct {
 	// RefreshOn is a suggested time to refresh the token.
 	// Clients should ignore this value when it's zero.
 	RefreshOn time.Time
+	// BindingCertificate is the certificate and private key for an mTLS proof-of-possession token.
+	// It is nil for bearer tokens. Present a bound token with the "mtls_pop" authorization scheme
+	// over a TLS connection authenticated with this certificate. Do not modify the certificate
+	// or close its private key while the token or its connections are in use.
+	BindingCertificate *tls.Certificate `json:"-"`
 }
 
 // TokenRequestOptions contain specific parameter that may be used by credentials types when attempting to get a token.
@@ -66,6 +72,12 @@ type TokenRequestOptions struct {
 	// handling CAE challenges. If a client that doesn't handle CAE challenges receives a CAE token, it may end up
 	// in a loop retrying an API call with a token that has been revoked due to CAE.
 	EnableCAE bool
+
+	// EnableMTLSPoP requests a certificate-bound mTLS proof-of-possession token.
+	// Currently supported by azidentity.ManagedIdentityCredential on Windows hosts with
+	// Credential Guard enabled and IMDSv2 available. Callers must verify BindingCertificate
+	// is non-nil because credentials that don't support this option may ignore it.
+	EnableMTLSPoP bool
 
 	// Scopes contains the list of permission scopes required for the token.
 	Scopes []string

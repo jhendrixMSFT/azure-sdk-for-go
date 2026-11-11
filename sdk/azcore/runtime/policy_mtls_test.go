@@ -5,9 +5,11 @@ package runtime
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -90,6 +92,74 @@ func TestMTLSPoPResourcePipeline(t *testing.T) {
 	}
 	wg.Wait()
 	assert.Equal(t, int32(2), acquisitions.Load(), "bound tokens should be cached")
+}
+
+func TestMTLSPoPTokenRenewal(t *testing.T) {
+	var calls atomic.Int32
+	var certs [2]tls.Certificate
+	tokens := [2]string{tokenValue, "renewed-token"}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		index := 0
+		if call > 1 {
+			index = 1
+		}
+		assert.Equal(t, "mtls_pop "+tokens[index], r.Header.Get("Authorization"))
+		assert.Equal(t, "true", r.Header.Get("x-ms-tokenboundauth"))
+		assert.Equal(t, uint16(tls.VersionTLS12), r.TLS.Version)
+		if assert.Len(t, r.TLS.PeerCertificates, 1) {
+			assert.Equal(t, certs[index].Certificate[0], r.TLS.PeerCertificates[0].Raw,
+				"renewal must not reuse a connection authenticated with the old certificate")
+		}
+		if call == 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequireAnyClientCert}
+	server.StartTLS()
+	defer server.Close()
+	certs[0] = server.TLS.Certificates[0]
+	leaf, err := x509.ParseCertificate(certs[0].Certificate[0])
+	require.NoError(t, err)
+	leaf.SerialNumber = new(big.Int).Add(leaf.SerialNumber, big.NewInt(1))
+	der, err := x509.CreateCertificate(rand.Reader, leaf, leaf, leaf.PublicKey, certs[0].PrivateKey)
+	require.NoError(t, err)
+	certs[1] = tls.Certificate{Certificate: [][]byte{der}, PrivateKey: certs[0].PrivateKey}
+
+	var acquisitions int
+	auth := NewBearerTokenPolicy(mockCredential{getTokenImpl: func(_ context.Context, opts policy.TokenRequestOptions) (exported.AccessToken, error) {
+		assert.True(t, opts.EnableMTLSPoP)
+		assert.Equal(t, []string{scope}, opts.Scopes)
+		index := 0
+		if acquisitions > 0 {
+			index = 1
+		}
+		acquisitions++
+		return exported.AccessToken{
+			Token: tokens[index], ExpiresOn: time.Now().Add(time.Hour), BindingCertificate: &certs[index],
+		}, nil
+	}}, []string{scope}, nil)
+	p := NewPipeline("test", "v1.0.0", PipelineOptions{
+		PerRetry: []policy.Policy{auth},
+	}, &policy.ClientOptions{
+		EnableMTLSPoP: true, Transport: server.Client(),
+		Retry: policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Millisecond},
+	})
+	for i := range 3 {
+		if i == 1 {
+			auth.mtlsResource.Expire()
+		}
+		req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
+		require.NoError(t, err)
+		resp, err := p.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+	assert.Equal(t, 2, acquisitions, "the retry and subsequent request must reuse the renewed bound token")
+	assert.Equal(t, int32(4), calls.Load(), "three successful reads and one retried 503")
 }
 
 func TestMTLSPoPChallengeAuthentication(t *testing.T) {

@@ -6,6 +6,11 @@ using MSAL v1.11.0-beta.1. Both SDK modules are replaced with this checkout;
 replacements in a dependency's `go.mod` aren't inherited by an application.
 The executable checks these replacements in its build metadata.
 
+The live smoke test is run on demand when a compatible VM and service fixture
+are available. It is not intended for normal CI or weekly live CI, which cannot
+assume those prerequisites. Fixture-free tests in the SDK module suites provide
+the routine regression coverage described below.
+
 ## Prerequisites
 
 - Go 1.26 or later to build.
@@ -195,3 +200,45 @@ still require a binding certificate; challenge requests retain HTTPS enforcement
 server certificate verification, redirect rejection, and transport validation.
 This covers the failure originally reproduced on HEAD `dd45fa1ed0`, where the
 initial challenge failed before the credential was called.
+
+### Offline regression coverage in normal CI
+
+The standalone app and its tests are intentionally in a nested module under
+`testdata`. Ordinary module `go test ./...` and SDK CI discovery do not include
+that module; the hardware-backed smoke test remains an on-demand check, not a
+CI prerequisite.
+The following fixture-free regressions are in the normal SDK module suites:
+
+- `azidentity`: attestation and PoP option propagation, binding-certificate
+  propagation, failure without downgrade, and certificate-scoped acquisition
+  pipelines that preserve middleware and caller-owned transports.
+- `azidentity`: on Windows, real MSAL IMDSv2 metadata requests select the requested
+  client, object, or resource ID (or the system-assigned identity). A mocked
+  metadata rejection stops the test before native key creation, attestation, or
+  certificate-store access, and must not trigger an IMDSv1 fallback.
+- `azcore/runtime`: certificate-free cold challenges followed by bound requests,
+  authorization scheme and binding headers, CAE challenges, concurrent cached
+  requests, bearer/PoP cache isolation, certificate expiration, redirects,
+  server trust, and unsupported transports.
+- `azcore/runtime`: forcing SDK cache reacquisition switches the certificate
+  actually presented on the TLS connection. A retried 503 and a subsequent
+  cached request retain the renewed token/certificate pair. This is synthetic
+  certificate replacement, not proof of real IMDS/Entra renewal or rotation.
+
+Run the focused suites from their respective module directories:
+
+```powershell
+# sdk\azidentity
+go test -count=1 -run 'MTLSPoP|Attestation|BindingCertificate|MTLSFactory' .
+
+# sdk\azcore
+go test -count=1 -run MTLSPoP ./runtime ./arm/runtime
+```
+
+These tests need no managed identity, Azure permissions, attestation DLL, or
+token-binding-enabled vault. They guard SDK integration behavior without relying
+on the availability of the live fixture. They cannot establish native KeyGuard
+availability, successful MAA attestation, real certificate issuance/rotation, or
+service-side binding enforcement. Preserve a successful live smoke run as
+separate evidence, and repeat it for release or authentication-dependency
+changes when the fixture is available.

@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -78,6 +80,64 @@ func TestManagedIdentityCredential_MTLSPoP(t *testing.T) {
 	var authErr *AuthenticationFailedError
 	require.ErrorAs(t, err, &authErr)
 	require.Equal(t, azcore.AccessToken{}, token)
+}
+
+func TestManagedIdentityCredential_MTLSPoPIdentitySelection(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("MSAL supports IMDSv2 mTLS PoP only on Windows")
+	}
+	setEnvironmentVariables(t, map[string]string{
+		identityEndpoint: "", identityHeader: "", identityServerThumbprint: "",
+		msiEndpoint: "", msiSecret: "", arcIMDSEndpoint: "",
+		"MSAL_MI_DISABLE_IMDS_V2": "",
+	})
+	for _, tc := range []struct {
+		name, parameter string
+		id              ManagedIDKind
+	}{
+		{name: "system assigned"},
+		{name: "client ID", parameter: "client_id", id: ClientID("11111111-2222-3333-4444-555555555555")},
+		{name: "object ID", parameter: "object_id", id: ObjectID("22222222-3333-4444-5555-666666666666")},
+		{name: "resource ID", parameter: "mi_res_id", id: ResourceID("/subscriptions/test/resourceGroups/test/providers/Microsoft.ManagedIdentity/userAssignedIdentities/test")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, close := mock.NewServer(mock.WithTransformAllRequestsToTestServerUrl())
+			defer close()
+			// Stop at metadata discovery, before any native key or certificate-store operation.
+			srv.SetResponse(mock.WithStatusCode(http.StatusBadRequest), mock.WithHeader("Server", "IMDS"),
+				mock.WithBody([]byte(`{"error":"invalid_request","error_description":"offline metadata rejection"}`)))
+			wantQuery := url.Values{"cred-api-version": {"2.0"}}
+			if tc.id != nil {
+				wantQuery.Set(tc.parameter, tc.id.String())
+			}
+			c, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{
+				ID: tc.id, EnableAttestation: true,
+				ClientOptions: azcore.ClientOptions{
+					Transport: srv,
+					Retry:     policy.RetryOptions{MaxRetries: -1},
+					PerCallPolicies: []policy.Policy{managedIdentityTestPolicy{do: func(req *policy.Request) {
+						raw := req.Raw()
+						assert.Equal(t, http.MethodGet, raw.Method)
+						assert.Equal(t, "169.254.169.254", raw.URL.Host)
+						assert.Equal(t, "/metadata/identity/getplatformmetadata", raw.URL.Path)
+						assert.Equal(t, wantQuery, raw.URL.Query())
+						assert.Equal(t, "true", raw.Header.Get("Metadata"))
+						assert.NotEmpty(t, raw.Header.Get("x-ms-client-request-id"))
+						assert.Contains(t, raw.Header.Get("User-Agent"), "azsdk-go-azidentity/")
+					}}},
+				},
+			})
+			require.NoError(t, err)
+			token, err := c.GetToken(context.Background(), policy.TokenRequestOptions{
+				Scopes: []string{t.Name()}, EnableMTLSPoP: true,
+			})
+			require.ErrorContains(t, err, "offline metadata rejection")
+			var authErr *AuthenticationFailedError
+			require.ErrorAs(t, err, &authErr)
+			assert.Equal(t, azcore.AccessToken{}, token)
+			assert.Equal(t, 1, srv.Requests(), "a failed mTLS request must not fall back to IMDSv1")
+		})
+	}
 }
 
 func TestManagedIdentityCredential_Attestation(t *testing.T) {

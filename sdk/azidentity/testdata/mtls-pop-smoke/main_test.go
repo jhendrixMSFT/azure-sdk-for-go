@@ -162,6 +162,45 @@ func TestValidateRejection(t *testing.T) {
 	require.Error(t, validateRejection(http.StatusForbidden, []byte(`{"error":{"code":"Forbidden"}}`)))
 }
 
+func TestValidateResourceResponse(t *testing.T) {
+	require.NoError(t, validateResourceResponse(http.StatusOK, []byte(`{"value":"secret-value"}`)))
+	for _, tc := range []struct {
+		name, body string
+		want       []string
+	}{
+		{
+			name: "RBAC denial",
+			body: `{"error":{"code":"Forbidden","message":"sensitive-detail","innererror":{"code":"ForbiddenByRbac"}}}`,
+			want: []string{`code "Forbidden"`, `inner code "ForbiddenByRbac"`},
+		},
+		{
+			name: "binding rejection",
+			body: `{"error":{"code":"MissingClientCertificate","message":"sensitive-detail"}}`,
+			want: []string{`code "MissingClientCertificate"`},
+		},
+		{
+			name: "malformed response",
+			body: `<html>sensitive-detail</html>`,
+			want: []string{"couldn't decode Key Vault error response", "body omitted"},
+		},
+		{
+			name: "unexpected body",
+			body: `{"value":"secret-value"}`,
+			want: []string{"no Key Vault error code", "body omitted"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateResourceResponse(http.StatusForbidden, []byte(tc.body))
+			require.ErrorContains(t, err, "HTTP 403, want 200")
+			for _, want := range tc.want {
+				assert.Contains(t, err.Error(), want)
+			}
+			assert.NotContains(t, err.Error(), "sensitive-detail")
+			assert.NotContains(t, err.Error(), "secret-value")
+		})
+	}
+}
+
 func TestResourceGET(t *testing.T) {
 	token := testToken(t)
 	var requests atomic.Int32

@@ -85,6 +85,15 @@ certificate-bound tokens. Set `EnableMTLSPoP: true` in the **resource client's**
 `azcore.ClientOptions` to request these tokens and automatically present their binding certificates.
 The option isn't needed on the credential's client options.
 
+When IMDS requires an attested binding key, set
+`ManagedIdentityCredentialOptions.EnableAttestation: true` when constructing the credential.
+This opts mTLS PoP requests into KeyGuard attestation; ordinary bearer requests are unchanged.
+Deploy `AttestationClientLib.dll` from the `Microsoft.Azure.Security.KeyGuardAttestation` package
+alongside the executable or into System32, and install the
+[x64 Microsoft Visual C++ 2015-2022 Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
+Attestation is disabled by default. When enabled, attestation failures fail acquisition rather
+than falling back to an unattested credential.
+
 Resource connections use TLS 1.2 with client-certificate renegotiation. Redirects and ARM auxiliary
 tenant authentication aren't supported. Custom transports for both the credential and resource
 client must be `*http.Client` values with a standard `*http.Transport` (or a nil transport).

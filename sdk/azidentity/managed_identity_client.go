@@ -52,6 +52,7 @@ type managedIdentityClient struct {
 	configurableClient configurableClient
 	clientOptions      azcore.ClientOptions
 	mtlsChild          bool
+	enableAttestation  bool
 }
 
 // setIMDSRetryOptionDefaults sets zero-valued fields to default values appropriate for IMDS
@@ -101,7 +102,7 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 	cp := options.ClientOptions
 	// This option applies to resource requests, not the credential's acquisition pipeline.
 	cp.EnableMTLSPoP = false
-	c := managedIdentityClient{}
+	c := managedIdentityClient{enableAttestation: options.EnableAttestation}
 	source, err := managedidentity.GetSource()
 	if err != nil {
 		return nil, err
@@ -254,6 +255,9 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 	opts := []managedidentity.AcquireTokenOption{managedidentity.WithClaims(tro.Claims)}
 	if tro.EnableMTLSPoP {
 		opts = append(opts, managedidentity.WithMtlsProofOfPossession())
+		if c.enableAttestation {
+			opts = append(opts, managedidentity.WithAttestationSupport())
+		}
 	}
 	ar, err := c.msalClient.AcquireToken(ctx, tro.Scopes[0], opts...)
 	if err == nil {

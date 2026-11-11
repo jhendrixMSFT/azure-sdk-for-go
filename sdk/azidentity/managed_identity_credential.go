@@ -87,6 +87,13 @@ type ManagedIdentityCredentialOptions struct {
 	// and rejects redirects without modifying the caller's client.
 	azcore.ClientOptions
 
+	// EnableAttestation requests attestation of the KeyGuard binding key when GetToken requests
+	// an mTLS PoP token. It has no effect on ordinary bearer token requests and is false by default.
+	// Attestation requires AttestationClientLib.dll from Microsoft.Azure.Security.KeyGuardAttestation
+	// alongside the executable or in System32, and the x64 Microsoft Visual C++ 2015-2022 Redistributable.
+	// When enabled, attestation failures fail token acquisition without falling back to an unattested credential.
+	EnableAttestation bool
+
 	// ID of a managed identity the credential should authenticate. Set this field to use a specific identity instead of
 	// the hosting environment's default. The value may be the identity's client, object, or resource ID.
 	// NewManagedIdentityCredential returns an error when the hosting environment doesn't support user-assigned managed
@@ -129,6 +136,7 @@ func NewManagedIdentityCredential(options *ManagedIdentityCredentialOptions) (*M
 // This requires Windows with Credential Guard enabled and IMDSv2 available. The resource must support
 // mTLS PoP. Enable ClientOptions.EnableMTLSPoP on the resource client to present the token and its
 // binding certificate automatically. Unsupported hosts return an error without falling back to bearer authentication.
+// Set ManagedIdentityCredentialOptions.EnableAttestation when IMDS requires an attested binding key.
 func (c *ManagedIdentityCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	var err error
 	ctx, endSpan := runtime.StartSpan(ctx, credNameManagedIdentity+"."+traceOpGetToken, c.mic.azClient.Tracer(), nil)

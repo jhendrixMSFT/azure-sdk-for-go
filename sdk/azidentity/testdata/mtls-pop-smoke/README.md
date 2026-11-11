@@ -81,10 +81,15 @@ The app runs **on the VM** and authenticates as its managed identity, not the
 Azure CLI account. It doesn't need Azure CLI on the VM, a client secret, or a
 tenant-ID argument.
 
-The current SDK/app doesn't request explicit key attestation. If the test
-configuration requires attested issuance, additional SDK support is needed
-before this app can verify it; deploying the attestation DLL alone doesn't
-enable that request.
+If IMDS requires attested issuance, pass `-attestation` to set
+`ManagedIdentityCredentialOptions.EnableAttestation`. Deploy `AttestationClientLib.dll`
+from the `Microsoft.Azure.Security.KeyGuardAttestation` package
+(`runtimes/win-x64/native`) alongside the executable or into System32, and install
+the [x64 Microsoft Visual C++ 2015-2022 Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
+The DLL isn't loaded from the working directory or `PATH`. Attestation is disabled
+by default; deploying the DLL alone doesn't enable it. When enabled, attestation
+failures fail acquisition without falling back to an unattested credential.
+Ordinary bearer requests remain unchanged.
 
 ## Build and run
 
@@ -109,7 +114,8 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 ```
 
 Alternatively select a user-assigned identity with `-object-id` or `-resource-id`.
-Only one identity selector is permitted. The default overall timeout is five
+Only one identity selector is permitted. Add `-attestation` to either command
+when IMDS requires key attestation. The default overall timeout is five
 minutes; override with `-timeout 10m`. To build elsewhere and copy to the VM,
 preserve the two relative module replacements and build with `GOOS=windows`
 and the VM's `GOARCH`. The VM doesn't need Go to run the executable.
@@ -143,7 +149,9 @@ Every check must pass, the process must exit zero, and the final message must be
 JWT decoding checks the binding claim, **not the signature**. The resource
 requests establish server acceptance and enforcement. Token strings, private
 keys, secret values, and HTTP bodies aren't printed. A public certificate
-thumbprint and token expiry are printed for correlation.
+thumbprint and token expiry are printed for correlation. Failed direct resource
+requests report only the HTTP status and Key Vault error and inner error codes,
+not the error message or response body.
 
 The direct resource transport uses TLS 1.2, client renegotiation, and
 `GetClientCertificate`, as required by the MSAL sample. Server certificate
@@ -155,9 +163,15 @@ leaves this transport configuration to `azcore`.
 - Acquisition failure: inspect Windows Credential Guard/KeyGuard, IMDSv2,
   identity assignment, Entra connectivity, and resource opt-in. Unsupported hosts
   fail; there's no fallback to another credential.
+- IMDS reports "Attestation Token is missing / empty": rebuild and run with
+  `-attestation`, with the attestation DLL and x64 Visual C++ runtime installed.
+  If attestation itself fails, inspect the reported native-library or attestation
+  error rather than disabling attestation.
 - Direct request HTTP 403/404: check token-binding opt-in, network restrictions,
-  RBAC propagation, and secret existence. A successful token request alone does
-  not verify resource access.
+  RBAC propagation, and secret existence. Use the reported Key Vault error and
+  inner error codes to distinguish authorization or network denials from
+  certificate-binding rejection. A successful token request alone does not
+  verify resource access.
 - Missing-certificate request succeeds: token binding isn't being enforced.
 - Missing-certificate request fails for another reason: inconclusive, not a pass.
 - Automatic SDK request fails before requesting a token: the resource client's

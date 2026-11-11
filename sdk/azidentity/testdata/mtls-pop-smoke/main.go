@@ -36,6 +36,7 @@ type configuration struct {
 	vaultURL, secretName           string
 	clientID, objectID, resourceID string
 	timeout                        time.Duration
+	attestation                    bool
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 	flag.StringVar(&cfg.clientID, "client-id", "", "User-assigned identity client ID; omit all identity flags for system-assigned")
 	flag.StringVar(&cfg.objectID, "object-id", "", "User-assigned identity object ID (mutually exclusive with other identity flags)")
 	flag.StringVar(&cfg.resourceID, "resource-id", "", "User-assigned identity resource ID (mutually exclusive with other identity flags)")
+	flag.BoolVar(&cfg.attestation, "attestation", false, "Request KeyGuard key attestation (requires AttestationClientLib.dll and the x64 Visual C++ runtime)")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "Overall test timeout")
 	flag.Parse()
 	if err := run(context.Background(), cfg); err != nil {
@@ -76,7 +78,9 @@ func run(ctx context.Context, cfg configuration) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
-	credential, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{ID: cfg.identity()})
+	credential, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+		ID: cfg.identity(), EnableAttestation: cfg.attestation,
+	})
 	if err != nil {
 		return fmt.Errorf("creating ManagedIdentityCredential: %w", err)
 	}
@@ -280,21 +284,44 @@ func resourceGET(ctx context.Context, client *http.Client, target, token string)
 func verifyResource(ctx context.Context, target string, token azcore.AccessToken) error {
 	client := newResourceClient(token.BindingCertificate, nil)
 	defer client.CloseIdleConnections()
-	status, _, err := resourceGET(ctx, client, target, token.Token)
+	status, body, err := resourceGET(ctx, client, target, token.Token)
 	if err != nil {
 		return fmt.Errorf("direct bound resource request: %w", err)
 	}
-	if status != http.StatusOK {
-		return fmt.Errorf("direct bound resource request: HTTP %d, want 200 (check vault opt-in, RBAC, network access, and secret name)", status)
+	if err := validateResourceResponse(status, body); err != nil {
+		return fmt.Errorf("direct bound resource request: %w", err)
 	}
 	// A separate transport prevents the negative request from reusing an authenticated connection.
 	withoutCert := newResourceClient(nil, nil)
 	defer withoutCert.CloseIdleConnections()
-	status, body, err := resourceGET(ctx, withoutCert, target, token.Token)
+	status, body, err = resourceGET(ctx, withoutCert, target, token.Token)
 	if err != nil {
 		return fmt.Errorf("missing-certificate request failed without an HTTP rejection; this isn't proof of binding: %w", err)
 	}
 	return validateRejection(status, body)
+}
+
+func validateResourceResponse(status int, body []byte) error {
+	if status == http.StatusOK {
+		return nil
+	}
+	// Only report error codes, never a secret value, error message, or raw response body.
+	var response struct {
+		Error struct {
+			Code       string `json:"code"`
+			InnerError struct {
+				Code string `json:"code"`
+			} `json:"innererror"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("HTTP %d, want 200 (couldn't decode Key Vault error response; body omitted)", status)
+	}
+	if response.Error.Code == "" {
+		return fmt.Errorf("HTTP %d, want 200 (no Key Vault error code in response; body omitted)", status)
+	}
+	return fmt.Errorf("HTTP %d, want 200 (Key Vault code %q, inner code %q; check vault opt-in, RBAC, network access, and secret name)",
+		status, response.Error.Code, response.Error.InnerError.Code)
 }
 
 func validateRejection(status int, body []byte) error {

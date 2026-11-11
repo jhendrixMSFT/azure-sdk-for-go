@@ -80,6 +80,79 @@ func TestManagedIdentityCredential_MTLSPoP(t *testing.T) {
 	require.Equal(t, azcore.AccessToken{}, token)
 }
 
+func TestManagedIdentityCredential_Attestation(t *testing.T) {
+	setEnvironmentVariables(t, map[string]string{
+		identityEndpoint: "", identityHeader: "", identityServerThumbprint: "",
+		msiEndpoint: "", msiSecret: "", arcIMDSEndpoint: "",
+	})
+	for _, tc := range []struct {
+		name              string
+		enableAttestation bool
+		enableMTLSPoP     bool
+		wantOptions       []managedidentity.AcquireTokenOption
+		tokenErr          error
+	}{
+		{
+			name: "unattested PoP", enableMTLSPoP: true,
+			wantOptions: []managedidentity.AcquireTokenOption{managedidentity.WithMtlsProofOfPossession()},
+		},
+		{
+			name: "bearer with attestation enabled", enableAttestation: true,
+		},
+		{
+			name: "attested PoP", enableAttestation: true, enableMTLSPoP: true,
+			wantOptions: []managedidentity.AcquireTokenOption{
+				managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport(),
+			},
+		},
+		{
+			name: "attestation unavailable", enableAttestation: true, enableMTLSPoP: true,
+			wantOptions: []managedidentity.AcquireTokenOption{
+				managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport(),
+			},
+			tokenErr: managedidentity.ErrAttestationUnavailable,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{EnableAttestation: tc.enableAttestation})
+			require.NoError(t, err)
+			const claims = `{"access_token":{"test":"claim"}}`
+			var want managedidentity.AcquireTokenOptions
+			managedidentity.WithClaims(claims)(&want)
+			for _, opt := range tc.wantOptions {
+				opt(&want)
+			}
+			calls := 0
+			c.mic.msalClient = fakeManagedIdentityClient{acquireToken: func(_ context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+				calls++
+				assert.Equal(t, "https://vault.azure.net", resource)
+				var got managedidentity.AcquireTokenOptions
+				for _, opt := range opts {
+					opt(&got)
+				}
+				assert.Equal(t, want, got)
+				if tc.tokenErr != nil {
+					return managedidentity.AuthResult{}, tc.tokenErr
+				}
+				return managedidentity.AuthResult{AccessToken: tokenValue}, nil
+			}}
+			token, err := c.GetToken(context.Background(), policy.TokenRequestOptions{
+				Scopes: []string{"https://vault.azure.net/.default"}, Claims: claims, EnableMTLSPoP: tc.enableMTLSPoP,
+			})
+			assert.Equal(t, 1, calls, "attestation failure must not trigger an unattested fallback")
+			if tc.tokenErr != nil {
+				require.ErrorContains(t, err, tc.tokenErr.Error())
+				var authErr *AuthenticationFailedError
+				require.ErrorAs(t, err, &authErr)
+				assert.Equal(t, azcore.AccessToken{}, token)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tokenValue, token.Token)
+			}
+		})
+	}
+}
+
 func TestManagedIdentityCredential_BindingCertificate(t *testing.T) {
 	c, err := NewManagedIdentityCredential(nil)
 	require.NoError(t, err)

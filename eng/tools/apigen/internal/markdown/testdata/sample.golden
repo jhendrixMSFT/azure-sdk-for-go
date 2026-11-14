@@ -1,0 +1,69 @@
+# sample
+
+## Module
+
+```text
+module example.com/sample/v2
+
+go 1.26.0
+```
+
+## Package sample
+
+```go
+package sample
+
+import (
+	"context"
+)
+
+func Identity[T any](value T) T
+
+type Client struct {
+	// Contains no exported fields.
+}
+
+func NewClient() (*Client, error)
+
+func (*Client) Send(ctx context.Context, value string) error
+
+type Config struct {
+	Value   *string `json:"value,omitempty"`
+	Enabled bool
+}
+
+var (
+	Alternate = Config{Value: nil}
+	Default   = Config{}
+)
+
+type ETag string
+
+const (
+	ETagAny  ETag = "*"
+	ETagZulu ETag = "z"
+)
+
+// Alias of example.com/sample/v2/internal/model.Record.
+type Record struct {
+	Name string
+}
+
+func (*Record) Reset()
+```
+
+## Package arm/policy
+
+```go
+package policy
+
+type ARM string
+```
+
+## Package policy
+
+```go
+package policy
+
+type Policy string
+```

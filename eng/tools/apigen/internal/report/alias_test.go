@@ -235,6 +235,78 @@ type Payload[T any] struct{ Value T }
 	assert.Equal(t, "generated.ExpiryOptions", constantType.String())
 }
 
+func TestExpandInternalAliasEmbeddedNames(t *testing.T) {
+	t.Setenv("GOWORK", "off")
+	dir := t.TempDir()
+	require.NoError(t, os.CopyFS(dir, fstest.MapFS{
+		"go.mod": {Data: []byte("module example.com/sample\n\ngo 1.26.0\n")},
+		"sample.go": {Data: []byte(`package sample
+
+import "example.com/sample/internal/model"
+
+type Response = model.Response
+type Renamed = model.Embedded
+type RenamedPointer = model.Pointer
+type RecursiveAlias = model.Recursive
+`)},
+		"other/other.go": {Data: []byte(`package other
+
+import "example.com/sample/internal/model"
+
+type Embedded = model.Embedded
+`)},
+		"internal/model/model.go": {Data: []byte(`package model
+
+type Embedded struct{ Value int }
+type Pointer struct{ Value string }
+type Generic[T any] struct{ Value T }
+type Response struct {
+	Embedded
+	*Pointer
+	Generic[int]
+	Direct Embedded
+}
+type Recursive struct {
+	*Recursive
+	Next *Recursive
+}
+`)},
+	}))
+	loaded, err := loader.Load(t.Context(), dir)
+	require.NoError(t, err)
+	packages, err := report.ExtractPackages(loaded)
+	require.NoError(t, err)
+	require.NotEmpty(t, packages)
+	pkg := packages[0]
+	declarations := make(map[string]report.Type)
+	for _, typ := range pkg.Types {
+		declarations[typ.Name] = typ
+	}
+	spec, ok := declarations["Response"].Decl.Specs[0].(*ast.TypeSpec)
+	require.True(t, ok)
+	structure, ok := spec.Type.(*ast.StructType)
+	require.True(t, ok)
+	require.Len(t, structure.Fields.List, 4)
+	var embedded []string
+	for _, field := range structure.Fields.List[:3] {
+		assert.Empty(t, field.Names, "embedded fields must remain embedded")
+		var output bytes.Buffer
+		require.NoError(t, format.Node(&output, pkg.FileSet, field.Type))
+		embedded = append(embedded, output.String())
+	}
+	assert.Equal(t, []string{"other.Embedded", "*model.Pointer", "model.Generic[int]"}, embedded)
+	var direct bytes.Buffer
+	require.NoError(t, format.Node(&direct, pkg.FileSet, structure.Fields.List[3].Type))
+	assert.Equal(t, "Renamed", direct.String(), "named fields can still prefer differently named public aliases")
+	recursive := declarations["RecursiveAlias"]
+	assert.Contains(t, renderAliasDeclaration(t, pkg.FileSet, recursive.Decl, recursive.Comments), "*model.Recursive")
+	assert.Contains(t, renderAliasDeclaration(t, pkg.FileSet, recursive.Decl, recursive.Comments), "Next *RecursiveAlias")
+	assert.Equal(t, []report.Import{
+		{Path: "example.com/sample/internal/model"},
+		{Path: "example.com/sample/other"},
+	}, pkg.Imports)
+}
+
 func TestExpandInternalAliasErrors(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	tests := []struct {
@@ -254,12 +326,6 @@ func TestExpandInternalAliasErrors(t *testing.T) {
 			declaration: "type Alias = impl.Generic[string]",
 			origin:      "type Generic[T any] struct{ Value T }",
 			message:     "generic alias or instantiated target",
-		},
-		{
-			name:        "renamed embedding",
-			declaration: "type Alias = impl.Record; type PublicEmbedded = impl.Embedded",
-			origin:      "type Record struct{ Embedded }; type Embedded struct{ Value int }",
-			message:     `embedded field "Embedded" cannot be renamed to "PublicEmbedded"`,
 		},
 	}
 	for _, tt := range tests {

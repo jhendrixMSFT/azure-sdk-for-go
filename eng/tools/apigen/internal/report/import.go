@@ -171,7 +171,7 @@ func (c *importCollector) constantType(value *Constant) (ast.Expr, []*ast.Commen
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse constant type: %w", err)
 	}
-	normalizer.resolve = func(expr ast.Expr) (ast.Expr, error) {
+	normalizer.resolve = func(expr ast.Expr, requiredName string) (ast.Expr, error) {
 		var object types.Object
 		switch expr := expr.(type) {
 		case *ast.Ident:
@@ -190,7 +190,7 @@ func (c *importCollector) constantType(value *Constant) (ast.Expr, []*ast.Commen
 		if !ok {
 			return nil, fmt.Errorf("constant type information for %T is unavailable", expr)
 		}
-		reference := c.aliases.typeReference(name, c.source.Types, nil, expr.Pos(), c.refs)
+		reference := c.aliases.typeReference(name, c.source.Types, nil, requiredName, expr.Pos(), c.refs)
 		if selector, ok := reference.(*ast.SelectorExpr); ok {
 			qualifier, ok := selector.X.(*ast.Ident)
 			if !ok {

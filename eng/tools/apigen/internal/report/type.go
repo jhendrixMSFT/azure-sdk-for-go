@@ -125,14 +125,18 @@ func extractTypes(pkg *packages.Package, aliases *aliasExpander, refs map[*ast.I
 
 type declarationNormalizer struct {
 	comments []*ast.CommentGroup
-	resolve  func(ast.Expr) (ast.Expr, error)
+	resolve  func(ast.Expr, string) (ast.Expr, error)
 }
 
 func (n *declarationNormalizer) typeExpr(expr ast.Expr) (ast.Expr, error) {
+	return n.typeExprWithName(expr, "")
+}
+
+func (n *declarationNormalizer) typeExprWithName(expr ast.Expr, requiredName string) (ast.Expr, error) {
 	switch source := expr.(type) {
 	case *ast.Ident, *ast.SelectorExpr:
 		if n.resolve != nil {
-			return n.resolve(expr)
+			return n.resolve(expr, requiredName)
 		}
 		return expr, nil
 	case *ast.StructType:
@@ -178,12 +182,12 @@ func (n *declarationNormalizer) typeExpr(expr ast.Expr) (ast.Expr, error) {
 	case *ast.StarExpr:
 		copy := *source
 		var err error
-		copy.X, err = n.typeExpr(source.X)
+		copy.X, err = n.typeExprWithName(source.X, requiredName)
 		return &copy, err
 	case *ast.ParenExpr:
 		copy := *source
 		var err error
-		copy.X, err = n.typeExpr(source.X)
+		copy.X, err = n.typeExprWithName(source.X, requiredName)
 		return &copy, err
 	case *ast.Ellipsis:
 		copy := *source
@@ -193,7 +197,7 @@ func (n *declarationNormalizer) typeExpr(expr ast.Expr) (ast.Expr, error) {
 	case *ast.IndexExpr:
 		copy := *source
 		var err error
-		copy.X, err = n.typeExpr(source.X)
+		copy.X, err = n.typeExprWithName(source.X, requiredName)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +206,7 @@ func (n *declarationNormalizer) typeExpr(expr ast.Expr) (ast.Expr, error) {
 	case *ast.IndexListExpr:
 		copy := *source
 		var err error
-		copy.X, err = n.typeExpr(source.X)
+		copy.X, err = n.typeExprWithName(source.X, requiredName)
 		if err != nil {
 			return nil, err
 		}
@@ -243,6 +247,7 @@ func (n *declarationNormalizer) fields(source *ast.FieldList, publicOnly bool) (
 		filtered := *field
 		filtered.Doc = nil
 		filtered.Comment = nil
+		requiredName := ""
 		if publicOnly {
 			if len(field.Names) == 0 {
 				name, err := baseTypeName(field.Type)
@@ -252,6 +257,7 @@ func (n *declarationNormalizer) fields(source *ast.FieldList, publicOnly bool) (
 				if !token.IsExported(name) {
 					continue
 				}
+				requiredName = name
 			} else {
 				filtered.Names = nil
 				for _, name := range field.Names {
@@ -265,22 +271,9 @@ func (n *declarationNormalizer) fields(source *ast.FieldList, publicOnly bool) (
 			}
 		}
 		var err error
-		filtered.Type, err = n.typeExpr(field.Type)
+		filtered.Type, err = n.typeExprWithName(field.Type, requiredName)
 		if err != nil {
 			return nil, err
-		}
-		if publicOnly && len(field.Names) == 0 && n.resolve != nil {
-			original, err := baseTypeName(field.Type)
-			if err != nil {
-				return nil, err
-			}
-			replacement, err := baseTypeName(filtered.Type)
-			if err != nil {
-				return nil, err
-			}
-			if original != replacement {
-				return nil, fmt.Errorf("embedded field %q cannot be renamed to %q", original, replacement)
-			}
 		}
 		copy.List = append(copy.List, &filtered)
 	}

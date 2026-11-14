@@ -17,6 +17,19 @@ File output uses a temporary file in the destination directory and replaces the 
 
 The tool uses the current Go environment and build constraints. Use `go run . --help` for command-line help.
 
+### Generate reports for all SDK modules
+
+From this directory:
+
+```powershell
+go build .
+.\Generate-AllApiReports.ps1
+```
+
+The script finds every `go.mod` under the repository's `sdk` directory, including nested modules, and generates or replaces `api.md` in each module directory. It continues after generation failures and prints each failed module's absolute directory path in a final summary. Exit code 1 means modules failed; exit code 0 includes an all-modules-successful message. Existing reports for failed modules are left unchanged by apigen.
+
+Use `-SdkRoot <directory>` to scan a smaller tree and `-ApigenPath <executable>` to select a different built generator. PowerShell 7 is required.
+
 ## Report format
 
 - Each package has a Go code block containing its exported declarations. Its import block includes only packages referenced by public variable declarations, constant types, field types, parameters, results, embedded types, alias targets, and generic constraints, including those in expanded internal aliases. Implementation-only imports are omitted. Referenced types from other public packages are not expanded.
@@ -35,7 +48,9 @@ The tool uses the current Go environment and build constraints. Use `go run . --
 
 When multiple public aliases identify the same internal type, references prefer an alias in the current package, then the first alias ordered by import path and name. An expanded type's self-references use its own public name.
 
-Generic internal aliases and instantiated internal targets currently produce an explicit error. Unaliased internal types referenced by expanded declarations are preserved, including generic type references. Expansion fails when rebinding an embedded type would change its field name.
+Embedded struct types retain their field names and embedding. Public-alias selection for an embedded type therefore considers only aliases with the original field name; if none exists, the qualified source type is preserved instead of renaming the field.
+
+Generic internal aliases and instantiated internal targets currently produce an explicit error. Unaliased internal types referenced by expanded declarations are preserved, including generic type references.
 
 ## Import collection
 

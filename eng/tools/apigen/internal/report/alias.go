@@ -160,8 +160,8 @@ func (e *aliasExpander) aliasMethods(expansion *aliasExpansion, pkg *packages.Pa
 	return result, nil
 }
 
-func (e *aliasExpander) resolver(source, current *packages.Package, expansion *aliasExpansion, refs map[*ast.Ident]*types.Package) func(ast.Expr) (ast.Expr, error) {
-	return func(expr ast.Expr) (ast.Expr, error) {
+func (e *aliasExpander) resolver(source, current *packages.Package, expansion *aliasExpansion, refs map[*ast.Ident]*types.Package) func(ast.Expr, string) (ast.Expr, error) {
+	return func(expr ast.Expr, requiredName string) (ast.Expr, error) {
 		object := referencedTypeName(source, expr)
 		if object == nil {
 			return nil, fmt.Errorf("type information for %T in package %q is unavailable", expr, source.PkgPath)
@@ -172,17 +172,18 @@ func (e *aliasExpander) resolver(source, current *packages.Package, expansion *a
 		if _, ok := object.Type().(*types.TypeParam); ok {
 			return expr, nil
 		}
-		return e.typeReference(object, current.Types, expansion, expr.Pos(), refs), nil
+		return e.typeReference(object, current.Types, expansion, requiredName, expr.Pos(), refs), nil
 	}
 }
 
-func (e *aliasExpander) typeReference(object *types.TypeName, current *types.Package, expansion *aliasExpansion, pos token.Pos, refs map[*ast.Ident]*types.Package) ast.Expr {
+func (e *aliasExpander) typeReference(object *types.TypeName, current *types.Package, expansion *aliasExpansion, requiredName string, pos token.Pos, refs map[*ast.Ident]*types.Package) ast.Expr {
 	reference := object
 	switch {
-	case expansion != nil && types.Identical(types.Unalias(object.Type()), expansion.target):
+	case expansion != nil && (requiredName == "" || expansion.object.Name() == requiredName) &&
+		types.Identical(types.Unalias(object.Type()), expansion.target):
 		reference = expansion.object
 	case object.Pkg() != nil && internalPackagePath(object.Pkg().Path()):
-		if alias := e.publicAlias(object.Type(), current); alias != nil {
+		if alias := e.publicAlias(object.Type(), current, requiredName); alias != nil {
 			reference = alias
 		}
 	}
@@ -195,9 +196,12 @@ func (e *aliasExpander) typeReference(object *types.TypeName, current *types.Pac
 	return &ast.SelectorExpr{X: qualifier, Sel: name}
 }
 
-func (e *aliasExpander) publicAlias(target types.Type, current *types.Package) *types.TypeName {
+func (e *aliasExpander) publicAlias(target types.Type, current *types.Package, requiredName string) *types.TypeName {
 	var first *types.TypeName
 	for _, alias := range e.public {
+		if requiredName != "" && alias.Name() != requiredName {
+			continue
+		}
 		if !types.Identical(types.Unalias(alias.Type()), types.Unalias(target)) {
 			continue
 		}

@@ -2,9 +2,15 @@
 
 This standalone, read-only app verifies the local `azidentity` and `azcore` changes
 against [MSAL's IMDSv2/mTLS PoP flow](https://github.com/AzureAD/microsoft-authentication-library-for-go/pull/662)
-using MSAL v1.11.0-beta.1. Both SDK modules are replaced with this checkout;
+using MSAL v1.11.0-beta.1, overridden by the local feature branch for reboot-recovery
+validation. Both SDK modules are replaced with this checkout;
 replacements in a dependency's `go.mod` aren't inherited by an application.
-The executable checks these replacements in its build metadata.
+The executable checks the SDK replacements in its build metadata.
+The app's `go.mod` also replaces MSAL with
+`C:\git\AzureAD\microsoft-authentication-library-for-go`. This replacement is
+local to the standalone test app; SDK dependency manifests are unchanged.
+Update or remove it when building on another machine or validating a published
+MSAL version.
 
 The live smoke test is run on demand when a compatible VM and service fixture
 are available. It is not intended for normal CI or weekly live CI, which cannot
@@ -123,9 +129,83 @@ Only one identity selector is permitted. Add `-attestation` to either command
 when IMDS requires key attestation. The default overall timeout is five
 minutes; override with `-timeout 10m`. To build elsewhere and copy to the VM,
 preserve the two relative module replacements and build with `GOOS=windows`
-and the VM's `GOARCH`. The VM doesn't need Go to run the executable.
+and the VM's `GOARCH`. Also point the MSAL replacement at the feature checkout on
+the build machine. The VM doesn't need Go to run the executable.
 Copy the newly built executable to the VM and run it there from a clean
 PowerShell session. Check `$LASTEXITCODE` immediately after the app exits.
+
+### Reboot recovery
+
+After a successful run, rerun the same command after an owner-approved VM reboot,
+without deleting keys or certificates. Every check must pass again. The local
+MSAL fix recognizes `NCryptOpenKey` status `0x8009003A`
+(`NTE_VBS_CANNOT_DECRYPT_KEY`) as an unusable per-boot key and recreates it through
+the existing race-aware provisioning path. Access-denied and other unrelated
+open failures are not treated as missing keys. Offline MSAL tests cover this
+classification and concurrent-replacement decisions without requiring hardware
+or a reboot.
+
+### Optional concurrency and identity isolation
+
+These are bounded, on-demand additions, disabled unless explicitly selected:
+
+```powershell
+.\mtls-pop-smoke.exe -attestation `
+    -vault-url "https://<vault-name>.vault.azure.net" `
+    -secret-name "<existing-test-secret>" `
+    -concurrency 4 `
+    -isolation-client-id "<user-assigned-client-id-guid>"
+```
+
+`-concurrency` accepts 2-8 workers (zero disables it). After the ordinary smoke
+checks, it runs one concurrent wave against a shared SDK client, then another
+against two SDK clients sharing the same credential. Each wave has an authorized
+baseline. A failure cancels sibling requests, and all workers finish before the
+app returns. The overall `-timeout` also applies to these checks.
+For multi-process coverage, run two instances concurrently under the same Windows
+account, selecting the system identity in one and a UAMI in the other. Keep both
+processes bounded by `-timeout` and require both exit codes to be zero. This uses
+normal key provisioning; do not clear shared keys or certificates beforehand.
+
+`-isolation-client-id` independently creates a system-assigned credential and a
+credential for the specified UAMI, regardless of the primary identity selector.
+Both identities must be assigned to the VM and authorized to read the same
+secret. It alternates system/UAMI SDK reads twice, with separate SDK clients and
+credential caches, and directly reenters each credential between reads. Every
+acquisition must retain its identity claims and valid certificate binding. The
+UAMI's `appid` (or `azp`) must match the requested GUID; the two principals must
+be distinct and belong to the same tenant. Identity claims aren't printed.
+The identities may share the underlying CNG key or certificate; differing keys
+are not required. These checks do not force cold native key creation.
+
+Offline tests exercise actual concurrent local TLS reads, cancellation and
+failure propagation, and alternating SDK reads with deliberately crossed
+identity tokens. Like the rest of this app, they require an explicit test run
+in this nested module, not ordinary SDK CI discovery.
+
+### Certificate reissuance and cross-language coexistence
+
+Use MSAL's existing Windows live test
+`TestIMDSv2BoundTokenIsRejectedWithoutCertificate` for real certificate
+reissuance. Configure `IMDSV2_E2E_VAULT` (hostname only) and `IMDSV2_E2E_SECRET`,
+and select that test with the `e2e` build tag in the MSAL checkout. It requires a
+working system-assigned identity, including Graph token acquisition in its
+preflight. Keep `AttestationClientLib.dll` alongside the compiled test executable
+(not merely in the current directory). This test must prove both original and
+reissued token/certificate pairs work, the certificates differ, and presenting
+the original token with the new certificate gets a binding-specific rejection.
+An arbitrary 403 or transport failure is not proof.
+
+For coexistence, run this Go smoke app, the supplied C# live runner with
+`--expect pop`, then this Go app again, sequentially under the same Windows
+account and with the same identity. Preserve the C# runner's verified bundle
+and inspect its per-case results and skips. Never delete the shared
+`KeyGuardRSAKey` container or certificates between runs. This checks sequential
+cross-language reuse, not concurrent Go/C# key replacement.
+
+MSAL force refresh reissues a certificate; it does not prove natural
+lifetime-driven renewal or rotation of the underlying key. Neither scenario
+requires exposing force refresh through `azidentity`.
 
 ## Required results
 

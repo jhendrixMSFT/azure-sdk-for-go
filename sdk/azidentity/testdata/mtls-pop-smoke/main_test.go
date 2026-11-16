@@ -80,6 +80,9 @@ func TestConfiguration(t *testing.T) {
 		{"secret path", func(c *configuration) { c.secretName = "a/b" }},
 		{"timeout", func(c *configuration) { c.timeout = 0 }},
 		{"multiple identities", func(c *configuration) { c.clientID, c.objectID = "client", "object" }},
+		{"negative concurrency", func(c *configuration) { c.concurrency = -1 }},
+		{"no concurrency", func(c *configuration) { c.concurrency = 1 }},
+		{"unbounded concurrency", func(c *configuration) { c.concurrency = 9 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := base
@@ -407,4 +410,171 @@ func TestVerifyBuild(t *testing.T) {
 	require.NoError(t, verifyBuild(info))
 	localIdentity.Replace = &debug.Module{Path: localIdentity.Path, Version: "v1.15.0"}
 	require.ErrorContains(t, verifyBuild(info), "azidentity")
+}
+
+func TestSDKConcurrency(t *testing.T) {
+	token := testToken(t)
+	var reads atomic.Int32
+	var fail atomic.Bool
+	waves := [2]chan struct{}{make(chan struct{}), make(chan struct{})}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.Header().Set("WWW-Authenticate", `Bearer authorization="https://login.microsoftonline.com/tenant" resource="https://vault.azure.net"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		assert.Equal(t, "mtls_pop "+token.Token, r.Header.Get("Authorization"))
+		assert.Equal(t, "true", r.Header.Get("x-ms-tokenboundauth"))
+		if assert.Len(t, r.TLS.PeerCertificates, 1) {
+			assert.Equal(t, token.BindingCertificate.Certificate[0], r.TLS.PeerCertificates[0].Raw)
+		}
+		n := int(reads.Add(1)) - 1
+		if fail.Load() && n > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, err := w.Write([]byte(`{"error":{"code":"Forbidden","message":"not-logged"}}`))
+			assert.NoError(t, err)
+			return
+		}
+		if n%5 != 0 {
+			wave := waves[n/5]
+			if n%5 == 4 {
+				close(wave)
+			}
+			select {
+			case <-wave:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"value":"not-logged"}`))
+		assert.NoError(t, err)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequestClientCert}
+	server.StartTLS()
+	defer server.Close()
+	options := &azsecrets.ClientOptions{
+		ClientOptions:                        azcore.ClientOptions{Transport: server.Client()},
+		DisableChallengeResourceVerification: true,
+	}
+	credential := tokenCredentialFunc(func(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+		return token, nil
+	})
+	cfg := configuration{vaultURL: server.URL, secretName: "test-secret", concurrency: 4}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	require.NoError(t, verifySDKConcurrency(ctx, cfg, credential, options))
+	assert.Equal(t, int32(10), reads.Load(), "two baselines and two four-way concurrent waves")
+	assert.False(t, options.EnableMTLSPoP, "the caller's options must not be modified")
+	reads.Store(0)
+	fail.Store(true)
+	err := verifySDKConcurrency(ctx, cfg, credential, options)
+	require.ErrorContains(t, err, "HTTP 403, code Forbidden")
+	assert.NotContains(t, err.Error(), "not-logged")
+	cancelled, stop := context.WithCancel(context.Background())
+	stop()
+	require.ErrorIs(t, verifySDKConcurrency(cancelled, cfg, credential, options), context.Canceled)
+}
+
+func TestReadTokenIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, claims string
+		wantErr      string
+	}{
+		{"v1", `{"appid":"CLIENT","oid":"OBJECT","tid":"TENANT"}`, ""},
+		{"v2", `{"azp":"CLIENT","oid":"OBJECT","tid":"TENANT"}`, ""},
+		{"missing principal", `{"appid":"CLIENT","tid":"TENANT"}`, "requires"},
+		{"conflicting clients", `{"appid":"CLIENT","azp":"OTHER","oid":"OBJECT","tid":"TENANT"}`, "disagree"},
+		{"wrong type", `{"appid":42,"oid":"OBJECT","tid":"TENANT"}`, "decoding"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			token := "e30." + base64.RawURLEncoding.EncodeToString([]byte(tc.claims)) + ".sig"
+			got, err := readTokenIdentity(token)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tokenIdentity{"client", "object", "tenant"}, got)
+		})
+	}
+}
+
+func TestIdentityIsolation(t *testing.T) {
+	identities := [2]tokenIdentity{{"system", "system-object", "tenant"}, {"user", "user-object", "tenant"}}
+	var tokens [2]azcore.AccessToken
+	for i, id := range identities {
+		tokens[i] = testToken(t)
+		payload, err := tokenPayload(tokens[i].Token)
+		require.NoError(t, err)
+		var claims map[string]any
+		require.NoError(t, json.Unmarshal(payload, &claims))
+		claims["appid"], claims["oid"], claims["tid"] = id.clientID, id.objectID, id.tenantID
+		payload, err = json.Marshal(claims)
+		require.NoError(t, err)
+		tokens[i].Token = "e30." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
+	}
+	var reads atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.Header().Set("WWW-Authenticate", `Bearer authorization="https://login.microsoftonline.com/tenant" resource="https://vault.azure.net"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		i := int(reads.Add(1)-1) % 2
+		assert.Equal(t, "mtls_pop "+tokens[i].Token, r.Header.Get("Authorization"))
+		if assert.Len(t, r.TLS.PeerCertificates, 1) {
+			assert.Equal(t, tokens[i].BindingCertificate.Certificate[0], r.TLS.PeerCertificates[0].Raw)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"value":"not-logged"}`))
+		assert.NoError(t, err)
+	}))
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ClientAuth: tls.RequestClientCert}
+	server.StartTLS()
+	defer server.Close()
+	options := &azsecrets.ClientOptions{
+		ClientOptions:                        azcore.ClientOptions{Transport: server.Client()},
+		DisableChallengeResourceVerification: true,
+	}
+	for _, tc := range []struct {
+		name, wantErr string
+		requestedID   string
+		wrongBaseline bool
+		switchLater   bool
+	}{
+		{name: "distinct identities"},
+		{name: "wrong UAMI", wrongBaseline: true, wantErr: "doesn't match"},
+		{name: "same principal", requestedID: "system", wrongBaseline: true, wantErr: "different principals"},
+		{name: "cache crossed identities", switchLater: true, wantErr: "different identity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reads.Store(0)
+			var credentials [2]azcore.TokenCredential
+			for i := range credentials {
+				calls := 0
+				credentials[i] = tokenCredentialFunc(func(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+					calls++
+					if i == 1 && (tc.wrongBaseline || tc.switchLater && calls > 1) {
+						return tokens[0], nil
+					}
+					return tokens[i], nil
+				})
+			}
+			requestedID := tc.requestedID
+			if requestedID == "" {
+				requestedID = "user"
+			}
+			err := verifyIdentityIsolation(context.Background(), configuration{
+				vaultURL: server.URL, secretName: "test-secret", isolationClientID: requestedID,
+			}, credentials, options)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, int32(4), reads.Load())
+		})
+	}
 }

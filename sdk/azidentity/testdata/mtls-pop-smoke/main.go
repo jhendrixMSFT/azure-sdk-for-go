@@ -21,6 +21,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,8 @@ type configuration struct {
 	clientID, objectID, resourceID string
 	timeout                        time.Duration
 	attestation                    bool
+	concurrency                    int
+	isolationClientID              string
 }
 
 func main() {
@@ -47,6 +50,8 @@ func main() {
 	flag.StringVar(&cfg.objectID, "object-id", "", "User-assigned identity object ID (mutually exclusive with other identity flags)")
 	flag.StringVar(&cfg.resourceID, "resource-id", "", "User-assigned identity resource ID (mutually exclusive with other identity flags)")
 	flag.BoolVar(&cfg.attestation, "attestation", false, "Request KeyGuard key attestation (requires AttestationClientLib.dll and the x64 Visual C++ runtime)")
+	flag.IntVar(&cfg.concurrency, "concurrency", 0, "Opt in to shared/multiple-client concurrent reads with 2-8 workers; zero disables")
+	flag.StringVar(&cfg.isolationClientID, "isolation-client-id", "", "Opt in to alternating system-assigned and this UAMI client ID; both must read the secret")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "Overall test timeout")
 	flag.Parse()
 	if err := run(context.Background(), cfg); err != nil {
@@ -123,6 +128,27 @@ func run(ctx context.Context, cfg configuration) error {
 		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
 	}
 	fmt.Println("PASS: Key Vault SDK reads secret twice with ClientOptions.EnableMTLSPoP")
+	if cfg.concurrency > 0 {
+		if err := verifySDKConcurrency(ctx, cfg, credential, nil); err != nil {
+			return fmt.Errorf("concurrent SDK mTLS PoP: %w", err)
+		}
+		fmt.Printf("PASS: %d concurrent reads with one client and with two clients sharing a credential\n", cfg.concurrency)
+	}
+	if cfg.isolationClientID != "" {
+		var credentials [2]azcore.TokenCredential
+		for i, id := range []azidentity.ManagedIDKind{nil, azidentity.ClientID(cfg.isolationClientID)} {
+			credentials[i], err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+				ID: id, EnableAttestation: cfg.attestation,
+			})
+			if err != nil {
+				return fmt.Errorf("creating identity-isolation credential #%d: %w", i+1, err)
+			}
+		}
+		if err := verifyIdentityIsolation(ctx, cfg, credentials, nil); err != nil {
+			return fmt.Errorf("identity isolation: %w", err)
+		}
+		fmt.Println("PASS: alternating system-assigned/UAMI SDK reads retain distinct token identities")
+	}
 	fmt.Println("PASS: all mTLS PoP smoke checks")
 	return nil
 }
@@ -144,6 +170,9 @@ func (c configuration) validate() error {
 	}
 	if selectors > 1 {
 		return errors.New("specify at most one of client-id, object-id, and resource-id")
+	}
+	if c.concurrency != 0 && (c.concurrency < 2 || c.concurrency > 8) {
+		return errors.New("concurrency must be zero (disabled) or between 2 and 8")
 	}
 	return nil
 }
@@ -210,13 +239,9 @@ func validateBound(token azcore.AccessToken, now time.Time) (string, error) {
 	if !bytes.Equal(publicKey, leaf.RawSubjectPublicKeyInfo) {
 		return "", errors.New("binding private key doesn't match the leaf certificate")
 	}
-	parts := strings.Split(token.Token, ".")
-	if len(parts) != 3 {
-		return "", errors.New("bound access token isn't a three-part JWT")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	payload, err := tokenPayload(token.Token)
 	if err != nil {
-		return "", fmt.Errorf("decoding bound token payload: %w", err)
+		return "", err
 	}
 	var claims struct {
 		Confirmation struct {
@@ -232,6 +257,48 @@ func validateBound(token azcore.AccessToken, now time.Time) (string, error) {
 		return "", errors.New("bound token cnf.x5t#S256 is missing or doesn't match the binding certificate")
 	}
 	return thumbprint, nil
+}
+
+func tokenPayload(token string) ([]byte, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("access token isn't a three-part JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("decoding token payload: %w", err)
+	}
+	return payload, nil
+}
+
+type tokenIdentity struct {
+	clientID, objectID, tenantID string
+}
+
+func readTokenIdentity(token string) (tokenIdentity, error) {
+	payload, err := tokenPayload(token)
+	if err != nil {
+		return tokenIdentity{}, err
+	}
+	var claims struct {
+		AppID    string `json:"appid"`
+		AZP      string `json:"azp"`
+		ObjectID string `json:"oid"`
+		TenantID string `json:"tid"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return tokenIdentity{}, errors.New("decoding token identity claims failed")
+	}
+	if claims.AppID == "" {
+		claims.AppID = claims.AZP
+	}
+	if claims.AppID == "" || claims.ObjectID == "" || claims.TenantID == "" {
+		return tokenIdentity{}, errors.New("token identity requires appid/azp, oid, and tid claims")
+	}
+	if claims.AZP != "" && !strings.EqualFold(claims.AppID, claims.AZP) {
+		return tokenIdentity{}, errors.New("token appid and azp claims disagree")
+	}
+	return tokenIdentity{strings.ToLower(claims.AppID), strings.ToLower(claims.ObjectID), strings.ToLower(claims.TenantID)}, nil
 }
 
 func newResourceClient(cert *tls.Certificate, roots *x509.CertPool) *http.Client {
@@ -334,6 +401,7 @@ func validateRejection(status int, body []byte) error {
 type checkedCredential struct {
 	credential azcore.TokenCredential
 	calls      atomic.Int32
+	identity   *tokenIdentity
 }
 
 func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
@@ -347,33 +415,138 @@ func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRe
 	if _, err := validateBound(token, time.Now()); err != nil {
 		return azcore.AccessToken{}, err
 	}
+	if c.identity != nil {
+		got, err := readTokenIdentity(token.Token)
+		if err != nil {
+			return azcore.AccessToken{}, err
+		}
+		if got != *c.identity {
+			return azcore.AccessToken{}, errors.New("credential returned a token for a different identity")
+		}
+	}
 	c.calls.Add(1)
 	return token, nil
 }
 
 func verifySDK(ctx context.Context, cfg configuration, credential azcore.TokenCredential) error {
 	checked := &checkedCredential{credential: credential}
-	client, err := azsecrets.NewClient(cfg.vaultURL, checked, &azsecrets.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			EnableMTLSPoP: true,
-			Retry:         policy.RetryOptions{MaxRetries: -1},
-		},
-	})
+	client, err := newSecretClient(cfg, checked, nil)
 	if err != nil {
 		return err
 	}
 	for i := 1; i <= 2; i++ {
-		if _, err := client.GetSecret(ctx, cfg.secretName, "", nil); err != nil {
-			// Don't print the response body: it may contain a secret value.
-			var response *azcore.ResponseError
-			if errors.As(err, &response) {
-				return fmt.Errorf("GetSecret #%d: HTTP %d, code %s", i, response.StatusCode, response.ErrorCode)
-			}
+		if err := readSecret(ctx, client, cfg.secretName); err != nil {
 			return fmt.Errorf("GetSecret #%d: %w", i, err)
 		}
 	}
 	if checked.calls.Load() == 0 {
 		return errors.New("SDK resource calls never requested a bound token")
+	}
+	return nil
+}
+
+func newSecretClient(cfg configuration, credential azcore.TokenCredential, options *azsecrets.ClientOptions) (*azsecrets.Client, error) {
+	cp := azsecrets.ClientOptions{}
+	if options != nil {
+		cp = *options
+	}
+	cp.EnableMTLSPoP = true
+	cp.Retry.MaxRetries = -1
+	return azsecrets.NewClient(cfg.vaultURL, credential, &cp)
+}
+
+func readSecret(ctx context.Context, client *azsecrets.Client, name string) error {
+	_, err := client.GetSecret(ctx, name, "", nil)
+	// Don't print the response body: it may contain a secret value.
+	var response *azcore.ResponseError
+	if errors.As(err, &response) {
+		return fmt.Errorf("HTTP %d, code %s", response.StatusCode, response.ErrorCode)
+	}
+	return err
+}
+
+func verifySDKConcurrency(ctx context.Context, cfg configuration, credential azcore.TokenCredential, options *azsecrets.ClientOptions) error {
+	checked := &checkedCredential{credential: credential}
+	for _, clientCount := range []int{1, 2} {
+		clients := make([]*azsecrets.Client, clientCount)
+		for i := range clients {
+			client, err := newSecretClient(cfg, checked, options)
+			if err != nil {
+				return err
+			}
+			clients[i] = client
+		}
+		if err := readSecret(ctx, clients[0], cfg.secretName); err != nil {
+			return fmt.Errorf("%d-client baseline: %w", clientCount, err)
+		}
+		cx, cancel := context.WithCancel(ctx)
+		var wg sync.WaitGroup
+		results := make([]error, cfg.concurrency)
+		start := make(chan struct{})
+		for i := range cfg.concurrency {
+			wg.Go(func() {
+				<-start
+				if err := readSecret(cx, clients[i%len(clients)], cfg.secretName); err != nil {
+					results[i] = fmt.Errorf("%d-client read #%d: %w", clientCount, i+1, err)
+					cancel()
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+		cancel()
+		if err := errors.Join(results...); err != nil {
+			return err
+		}
+	}
+	if checked.calls.Load() == 0 {
+		return errors.New("concurrent SDK reads never requested a bound token")
+	}
+	return nil
+}
+
+func verifyIdentityIsolation(ctx context.Context, cfg configuration, credentials [2]azcore.TokenCredential, options *azsecrets.ClientOptions) error {
+	var identities [2]tokenIdentity
+	var checked [2]*checkedCredential
+	for i, credential := range credentials {
+		checked[i] = &checkedCredential{credential: credential}
+		token, err := checked[i].GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
+		if err != nil {
+			return fmt.Errorf("identity #%d baseline: %w", i+1, err)
+		}
+		identities[i], err = readTokenIdentity(token.Token)
+		if err != nil {
+			return err
+		}
+		checked[i].identity = &identities[i]
+	}
+	if !strings.EqualFold(identities[1].clientID, cfg.isolationClientID) {
+		return errors.New("UAMI token doesn't match isolation-client-id")
+	}
+	if identities[0].clientID == identities[1].clientID || identities[0].objectID == identities[1].objectID {
+		return errors.New("system-assigned and UAMI tokens must identify different principals")
+	}
+	if identities[0].tenantID != identities[1].tenantID {
+		return errors.New("system-assigned and UAMI tokens must belong to the same tenant")
+	}
+	var clients [2]*azsecrets.Client
+	for i := range clients {
+		client, err := newSecretClient(cfg, checked[i], options)
+		if err != nil {
+			return err
+		}
+		clients[i] = client
+	}
+	for round := range 2 {
+		for i := range clients {
+			// Reenter each credential even when the SDK's own token cache is warm.
+			if _, err := checked[i].GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true}); err != nil {
+				return fmt.Errorf("identity #%d round #%d: %w", i+1, round+1, err)
+			}
+			if err := readSecret(ctx, clients[i], cfg.secretName); err != nil {
+				return fmt.Errorf("identity #%d SDK round #%d: %w", i+1, round+1, err)
+			}
+		}
 	}
 	return nil
 }

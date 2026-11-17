@@ -20,6 +20,10 @@
 
 ### Other Changes
 
+- Authentication and retry policies support SDK-internal response classification. Classified
+  responses bypass authentication challenge resends and use the configured outer retry budget;
+  explicit `RetryOptions.ShouldRetry` callbacks retain precedence.
+
 ## 1.24.0 (2026-11-02)
 
 ### Features Added

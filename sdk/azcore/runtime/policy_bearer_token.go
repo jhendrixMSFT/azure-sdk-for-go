@@ -16,6 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo"
+	internalexported "github.com/Azure/azure-sdk-for-go/sdk/internal/exported"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/temporal"
 )
 
@@ -166,6 +167,17 @@ func (b *BearerTokenPolicy) Do(req *policy.Request) (*http.Response, error) {
 func (b *BearerTokenPolicy) handleChallenge(req *policy.Request, res *http.Response, recursed bool) (*http.Response, error) {
 	var err error
 	if res.StatusCode == http.StatusUnauthorized {
+		var classify internalexported.ResponseClassifier
+		if req.OperationValue(&classify) && classify != nil {
+			retry, err := classify(res)
+			if err != nil {
+				Drain(res)
+				return nil, err
+			}
+			if retry {
+				return res, nil
+			}
+		}
 		b.mainResource.Expire()
 		b.mtlsResource.Expire()
 		if res.Header.Get(shared.HeaderWWWAuthenticate) != "" {

@@ -393,7 +393,6 @@ func TestKeyVaultSDKColdChallenge(t *testing.T) {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		assert.Equal(t, "/secrets/test-secret/", r.URL.Path)
-		assert.Equal(t, uint16(tls.VersionTLS12), r.TLS.Version)
 		if r.Header.Get("Authorization") == "" {
 			challenges.Add(1)
 			assert.Empty(t, r.TLS.PeerCertificates)
@@ -403,6 +402,7 @@ func TestKeyVaultSDKColdChallenge(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		assert.Equal(t, uint16(tls.VersionTLS12), r.TLS.Version)
 		assert.Equal(t, "mtls_pop "+token.Token, r.Header.Get("Authorization"))
 		assert.Equal(t, "true", r.Header.Get("x-ms-tokenboundauth"))
 		if assert.Len(t, r.TLS.PeerCertificates, 1) {
@@ -422,9 +422,8 @@ func TestKeyVaultSDKColdChallenge(t *testing.T) {
 	})}
 	client, err := azsecrets.NewClient(server.URL, credential, &azsecrets.ClientOptions{
 		ClientOptions: azcore.ClientOptions{
-			EnableMTLSPoP: true,
-			Transport:     server.Client(),
-			Retry:         policy.RetryOptions{MaxRetries: -1},
+			Transport: server.Client(),
+			Retry:     policy.RetryOptions{MaxRetries: -1},
 		},
 		// The loopback server doesn't have a vault.azure.net hostname.
 		DisableChallengeResourceVerification: true,
@@ -449,6 +448,14 @@ func TestVerifyBuild(t *testing.T) {
 	info.Deps = []*debug.Module{localCore}
 	require.ErrorContains(t, verifyBuild(info), "azidentity")
 	info.Deps = append(info.Deps, localIdentity)
+	require.ErrorContains(t, verifyBuild(info), "internal")
+	info.Deps = append(info.Deps, &debug.Module{
+		Path: "github.com/Azure/azure-sdk-for-go/sdk/internal", Replace: &debug.Module{Path: "../../../internal"},
+	})
+	require.ErrorContains(t, verifyBuild(info), "security/keyvault/internal")
+	info.Deps = append(info.Deps, &debug.Module{
+		Path: "github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal", Replace: &debug.Module{Path: "../../../security/keyvault/internal"},
+	})
 	require.NoError(t, verifyBuild(info))
 	localCore.Replace.Version = "(devel)"
 	localIdentity.Replace.Version = "(devel)"

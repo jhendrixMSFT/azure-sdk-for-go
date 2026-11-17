@@ -39,8 +39,9 @@ Attested acquisition requires all of the following:
 - Managed identity PoP isn't disabled.
 - MSAL successfully discovers a host supporting mTLS PoP with at least KeyGuard binding strength.
 
-In the current preview, resource clients still require
-`ClientOptions.EnableMTLSPoP: true`; automatic service signaling is not yet implemented.
+Updated Key Vault clients signal PoP support automatically; construct them with ordinary
+options, for example `azsecrets.NewClient(vaultURL, cred, nil)`. Other resource clients
+can signal support with `ClientOptions.EnableMTLSPoP: true`.
 Direct token callers set `policy.TokenRequestOptions.EnableMTLSPoP` and inspect the returned
 `AccessToken.BindingCertificate` to determine whether bearer or mTLS PoP authorization is required.
 See the [identity documentation](../README.md#managed-identity-mtls-proof-of-possession)
@@ -49,8 +50,14 @@ for transport requirements.
 Ordinary bearer requests are unchanged. Without activation, when opted out, or when discovery
 successfully identifies an unsupported host, managed identity uses ordinary bearer acquisition.
 The package can be imported on unsupported platforms. Discovery failures aren't treated as
-known lack of support. Once attested acquisition is selected, failures are returned without
-retrying unattested acquisition or continuing to another credential.
+known lack of support. Once attested acquisition is selected, the credential returns failures
+without retrying unattested acquisition or continuing to another credential.
+
+The [Key Vault policy](../../security/keyvault/internal/README.md) handles the specifically
+classified tenant denial `AADSTS3921996` by acquiring a fresh bearer token and remembering
+the decision per tenant for that client. This isn't permission to downgrade for native
+attestation failures, cancellation, RBAC denials, network failures, or unsupported transports.
+The specific bound-token validation HTTP 401 is retried under the configured outer retry policy.
 
 To opt out on an individual managed identity credential, set
 `ManagedIdentityCredentialOptions.DisableMTLSPoP: true`. No additional public attestation

@@ -3,9 +3,10 @@
 This standalone, read-only app verifies the local `azidentity` and `azcore` changes
 against [MSAL's IMDSv2/mTLS PoP flow](https://github.com/AzureAD/microsoft-authentication-library-for-go/pull/662)
 using MSAL v1.11.0-beta.1, overridden by the local feature branch for reboot-recovery
-validation. Both SDK modules are replaced with this checkout;
+validation. The identity, core, SDK-internal, and Key Vault shared modules are replaced with this checkout;
 replacements in a dependency's `go.mod` aren't inherited by an application.
-The executable checks the SDK replacements in its build metadata.
+The executable checks those four SDK replacements in its build metadata. The optional
+attestation integration is also replaced locally and blank-imported by the app.
 The app's `go.mod` also replaces MSAL with
 `C:\git\AzureAD\microsoft-authentication-library-for-go`. This replacement is
 local to the standalone test app; SDK dependency manifests are unchanged.
@@ -128,7 +129,7 @@ Alternatively select a user-assigned identity with `-object-id` or `-resource-id
 Only one identity selector is permitted. Attestation selection is automatic.
 The default overall timeout is five
 minutes; override with `-timeout 10m`. To build elsewhere and copy to the VM,
-preserve the three relative SDK module replacements and build with `GOOS=windows`
+preserve the five relative SDK module replacements and build with `GOOS=windows`
 and the VM's `GOARCH`. Also point the MSAL replacement at the feature checkout on
 the build machine. The VM doesn't need Go to run the executable.
 Copy the newly built executable to the VM and run it there from a clean
@@ -272,12 +273,16 @@ Every check must pass, the process must exit zero, and the final message must be
    A timeout, TLS failure, redirect, unrelated 403, or 5xx doesn't pass.
 5. A subsequent ordinary acquisition on the same credential remains unbound,
    checking bearer/PoP cache isolation without assuming exact token reuse.
-6. A fresh `azsecrets.Client` with embedded
-   `azcore.ClientOptions{EnableMTLSPoP: true}` reads the secret twice.
+6. A fresh `azsecrets.Client` with no PoP enable flag reads the secret twice.
    A credential wrapper requires propagation of the PoP flag and validates every
    token the SDK requests. The client starts cold, including its initial
    unauthenticated Key Vault challenge; the app doesn't pre-seed that challenge
    or silently replace it with a hand-built pipeline.
+
+The SDK now supports narrowly classified tenant-denial fallback, but this eligible-host
+smoke app deliberately requires bound tokens. A bearer result isn't a passing PoP smoke check.
+Binding-validation retries use the normal outer retry policy; this app continues to disable
+automatic retries to make its live checks explicit.
 
 JWT decoding checks the binding claim, **not the signature**. The resource
 requests establish server acceptance and enforcement. Token strings, private
@@ -355,6 +360,12 @@ The following fixture-free regressions are in the normal SDK module suites:
   authorization scheme and binding headers, CAE challenges, concurrent cached
   requests, bearer/PoP cache isolation, certificate expiration, redirects,
   server trust, and unsupported transports.
+- `keyvault/internal`: automatic request signaling, POST body replay, strict tenant-denial
+  classification, concurrent tenant memory, cancellation, and bounded binding-validation
+  retries that preserve response bodies and caller overrides.
+- Key Vault clients: real TLS secrets reads, real credential-chain fallback, late
+  bound-to-bearer tenant transitions, and request signaling through every shared-policy
+  consumer (Secrets, Keys, Certificates, and the four Administration clients).
 - `azcore/runtime`: forcing SDK cache reacquisition switches the certificate
   actually presented on the TLS connection. A retried 503 and a subsequent
   cached request retain the renewed token/certificate pair. This is synthetic

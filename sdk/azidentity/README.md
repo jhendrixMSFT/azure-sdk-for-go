@@ -101,9 +101,10 @@ Activation is process-wide, including transitive imports. Merely requiring the m
 load native libraries, contact endpoints, or create keys. Native attestation remains in MSAL
 and is performed lazily when required for issuance.
 
-The target resource must support certificate-bound tokens. In the current preview, set
-`EnableMTLSPoP: true` in the **resource client's** embedded `azcore.ClientOptions` to signal
-PoP support; service clients don't yet signal it by default. The option isn't needed on the
+The target resource must support certificate-bound tokens. Updated Key Vault shared
+authentication automatically signals PoP support, so ordinary Key Vault client construction
+doesn't need an enable flag. Other resource clients can signal support with
+`EnableMTLSPoP: true` in their embedded `azcore.ClientOptions`. The option isn't needed on the
 credential's client options. Ordinary bearer requests remain unchanged. Without the import,
 or when successful capability discovery reports an unsupported host, managed identity uses
 ordinary bearer acquisition. Discovery errors aren't treated as known lack of support.
@@ -117,8 +118,15 @@ executable or into System32, and install the
 [x64 Microsoft Visual C++ 2015-2022 Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
 The DLL isn't loaded from the working directory or `PATH`. Deploying the DLL alone doesn't
 activate the integration. Once attested acquisition is selected, failures, including missing
-native dependencies, are returned without retrying unattested acquisition or continuing
-the default credential chain.
+native dependencies, are returned by the credential without retrying unattested acquisition
+or continuing the default credential chain.
+
+Key Vault has one narrowly classified exception: a token-service tenant denial with error code
+`AADSTS3921996` triggers fresh bearer acquisition and a client-lifetime, tenant-scoped decision.
+Cancellation and unrelated or mixed terminal errors don't permit fallback. The specific bound
+HTTP 401 validation marker is handled by the normal bounded retry policy, not bearer fallback.
+See the [shared Key Vault policy](../security/keyvault/internal/README.md)
+for details. This preview requires coordinated unreleased SDK modules.
 
 Configure `AZURE_CLIENT_ID` to select a UAMI with `DefaultAzureCredential`.
 When the chain includes managed identity and other credentials, its initial IMDS

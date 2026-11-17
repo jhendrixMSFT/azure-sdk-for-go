@@ -4,10 +4,10 @@
 
 - Last updated: 2026-11-17.
 - Working branch: `mtls-pop-1`, based on the existing mTLS PoP implementation.
-- Current phase: phases 2 and 3 implemented and validated; phase 4 is next.
+- Current phase: phases 2 through 4 implemented and validated; phase 5 is next.
 - Automatic managed identity eligibility selection and blank-import activation
-  are implemented. Service defaults, tenant fallback, and binding-error retries
-  remain unchanged pending phase 4.
+  are implemented, together with automatic Key Vault signaling, narrowly classified
+  tenant fallback, and bounded binding-error retries. Native MSAL behavior is unchanged.
 - None of the mTLS PoP work to date has been released in any form. Public
   surface added by this work can be renamed or removed without a deprecation
   period or compatibility shim. Previously released SDK APIs remain unaffected.
@@ -53,6 +53,7 @@ prerequisites remain necessary.
 | Initially enable automatic behavior for Key Vault clients using the shared authentication policy, with secret reads as the first live validation target. Other services remain unchanged. | Agreed |
 | Choose reasonable initial public names during implementation; naming is not a blocker. Perform a final naming cleanup before release. | Agreed |
 | Keep hardware-backed live tests on demand; use fixture-free tests for routine regression protection. | Established testing approach |
+| Use minimal SDK-internal authentication-error and response-classification bridges, not a Key Vault runtime dependency on azidentity or combined-message parsing. Standard Go error methods are observable additions; no customer switches or new public error types. | Agreed and implemented in phase 4 |
 
 Only an actual package import activates a Go package. Adding a requirement to
 `go.mod` alone is not activation. A transitive import can activate the integration
@@ -287,12 +288,13 @@ module has no replacements. Final dependency versions and release ordering remai
 phase 6 work.
 
 No phase-3 hardware-backed live tests or race-detector runs were performed.
-Cross-platform checks are compilation only. Phase 4 must still implement automatic
-Key Vault signaling, narrowly classified tenant fallback, and binding-error retries.
+Cross-platform checks are compilation only. At the phase-3 boundary, automatic
+Key Vault signaling, tenant fallback, and binding-error retries remained phase-4 work;
+they are now implemented below.
 
 ### 4. Enable automatic behavior in Key Vault
 
-**Status: pending; depends on stages 2 and 3.**
+**Status: implemented and validated offline.**
 
 Update [shared Key Vault authentication](../security/keyvault/internal/challenge_policy.go):
 
@@ -312,6 +314,77 @@ Update [shared Key Vault authentication](../security/keyvault/internal/challenge
 
 **Exit criterion:** real Key Vault SDK clients pass offline positive, ineligible,
 tenant-denial, and non-downgrade cases without customer enable flags.
+
+The [shared policy](../security/keyvault/internal/README.md) now signals PoP on
+authenticated requests, wraps the supplied credential for per-client tenant memory,
+and installs an SDK-internal operation-scoped response classifier. All seven consumers
+use their existing constructors: Secrets, Keys, Certificates, and Administration's
+Backup, EKM, RBAC, and Settings clients. No generated implementation changes were needed.
+The smoke app no longer sets the resource client's PoP enable flag.
+
+#### Internal bridges and Go adaptations
+
+- `sdk/internal/errorinfo` supplies authentication, unavailable, and credential-chain
+  markers. Identity errors implement standard `Is` and multi-cause `Unwrap` methods.
+  Existing error types and formatted messages are preserved. Nested chains explicitly
+  preserve terminal-failure precedence over unavailable causes.
+- Key Vault classifies individual credential-chain causes, never a flattened aggregate
+  message. Ordinary single-error Go wrappers are supported; unclassified joins,
+  cancellation, and unrelated terminal failures prevent fallback. Unlike C#'s exception
+  inheritance, Go represents a terminal managed identity denial as
+  `AuthenticationFailedError` within a chain. A known SDK chain permits fallback only
+  when every cause is unavailable or the specifically classified tenant denial.
+- `sdk/internal/exported.ResponseClassifier` connects authentication and outer retry
+  decisions without a public response-classifier option. `azcore` doesn't contain
+  Key Vault error codes. A classified binding response bypasses challenge resends
+  and token expiration, leaving count, delay, retry-after, cancellation, and operation
+  limits to the normal outer retry policy. Explicit `ShouldRetry` callbacks retain
+  precedence; service classification can add responses beyond the status-code list.
+- Tenant keys are case-insensitive, and memory is local to the client's credential
+  wrapper, including after a failed bearer acquisition. Fresh acquisition preserves
+  claims, scopes, tenant, CAE, and context while disabling PoP. Binding certificates
+  and bound headers are cleared when the actual returned token is bearer.
+- Classification matches the complete case-sensitive `AADSTS3921996` code with
+  Unicode word boundaries. Binding retries require HTTP 401, a bound request, and
+  the exact bracketed marker in JSON `error.message`. Malformed or differently shaped
+  JSON remains an ordinary service error. Body-read errors aren't suppressed.
+
+#### Validation
+
+Validation used a temporary workspace containing `sdk/internal`, `azcore`, `azidentity`,
+the optional integration, Key Vault shared internals, and all four Key Vault client
+modules, including the version-specific replacement for unreleased identity.
+No local replacements were added to releasable manifests. The standalone smoke app
+has application-local replacements and was also tested with `GOWORK=off`.
+Parent identity and public client unit runs used `AZURE_RECORD_MODE=live` only to
+avoid starting the recording proxy; no Azure service or native attestation was called.
+
+| Scope and command | Result |
+| --- | --- |
+| Core: `go test ./runtime ./arm/runtime ./policy ./internal/exported -count=1` | Passed |
+| Core: `go test ./runtime -run '^(TestRetryPolicy_ResponseClassifierError\|TestMTLSPoP\|TestBearerPolicy_MTLSPoP)' -count=3` | Passed |
+| Core: `go test ./runtime -run '^(TestBearerTokenPolicy\|TestRetryPolicy_ResponseClassifierError)' -count=1` | Passed |
+| Identity: `go test .\ -run '^(TestAuthenticationFailedError\|TestChainedTokenCredential\|TestDefaultAzureCredential\|TestManagedIdentity)' -count=1` | Passed |
+| Shared internals: `go test github.com/Azure/azure-sdk-for-go/sdk/internal/errorinfo github.com/Azure/azure-sdk-for-go/sdk/internal/exported -count=1` | Passed |
+| Optional integration: `go test github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation -count=3` | Passed in a separate imported binary |
+| Key Vault shared module: `go test ./... -count=3` | Passed, including cold POST replay through binding retry |
+| Secrets: `go test .\ -run '^TestClientMTLSPoP$' -count=3` | Passed, including real TLS and late tenant transition |
+| All Key Vault modules: `go test @kv -run '^(TestClientMTLSPoP\|TestClientSignalsMTLSPoP\|TestClientsSignalMTLSPoP\|TestDisableChallengeResourceVerification)$' -count=3` | Passed for all seven shared-policy consumers |
+| Affected modules: `go build @packages` and `go vet @packages` | Passed |
+| Smoke module, `GOWORK=off`: `go test ./... -count=1` and `go build -trimpath -o <temporary-executable> .` | Passed without replacing the existing smoke executable |
+| Affected local modules: `go build ./...` with `GOOS=linux`, `GOARCH=amd64`, and `GOOS=darwin`, `GOARCH=arm64` | Passed; compilation only |
+| Secrets: Linux `go test -c` | Cross-compilation passed; not executed |
+
+`@kv` contains the recursive import patterns for `azsecrets`, `azkeys`, `azcertificates`,
+and `azadmin`. `@packages` additionally includes `azcore`, `azidentity`, the optional
+integration, Key Vault shared internals, and the two changed SDK-internal packages.
+An initial broad macOS import wildcard also selected the unchanged optional identity
+cache module, which requires unavailable cgo accessors. Restricting cross-builds to
+the affected local module directories passed.
+
+No phase-4 hardware-backed live tests or race-detector runs were performed.
+Version floors, coordinated publication, final API/docs cleanup, and the live parity
+matrix remain phases 5 and 6.
 
 ### 5. Finish public APIs, examples, and smoke coverage
 
@@ -360,7 +433,7 @@ Repeat the on-demand live matrix:
 Do not claim natural lifetime-driven renewal, underlying key rotation, or a new
 post-reboot test unless those scenarios are actually exercised.
 
-Coordinate releases in dependency order: azcore, identity and its optional
+Coordinate releases in dependency order: SDK internals, azcore, identity and its optional
 integration, then Key Vault shared/client modules as required by their dependencies.
 
 **Exit criterion:** focused offline suites, builds, and static checks pass;
@@ -416,3 +489,5 @@ parity target; changing that target requires an explicit decision:
 | 2026-11-17 | Confirmed all work is unreleased and its new public surface may be renamed or removed. Established C# as the north star with constraint-justified deviations only. Checked the behavior matrix against pinned sources; clarified KeyGuard eligibility, tenant fallback scope, binding-error retries, custom transports, and MIC/DAC option visibility. |
 | 2026-11-17 | Agreed phase 1 resolutions: MIC opt-out without another public DAC option, minimal internal registration, explicit failure for unsupported bound transports, and initial Key Vault shared-policy scope. Public names are provisional and must not block implementation. Phase 1 design decisions are complete; phase 2 is ready to start. |
 | 2026-11-17 | Completed phase 2: adaptive token authorization and lazy certificate-scoped transport selection, with bearer transport preservation and no automatic downgrade on errors. Offline runtime/ARM/policy/request suites, five focused repetitions, build, and vet passed. Service defaults, native attestation, and optional registration are unchanged; phase 3 is ready. |
+| 2026-11-17 | Completed phase 3: optional blank-import registration, lazy availability lookup, automatic KeyGuard eligibility, MIC opt-out, and DAC bounded-probe reuse. Imported/unimported offline tests and portability checks passed. |
+| 2026-11-17 | Approved and implemented phase 4 internal bridges. Automatic Key Vault request signaling, structured tenant-denial fallback, and bounded binding-validation retries passed focused and repeated offline tests across all seven consumers, real local TLS, builds, vet, and scoped cross-compilation. Hardware parity and release coordination remain pending. |

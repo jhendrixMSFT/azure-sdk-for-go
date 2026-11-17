@@ -6,8 +6,8 @@
 
 - `ManagedIdentityCredential` supports certificate-bound mTLS PoP tokens on Windows hosts with
   Credential Guard and IMDSv2. Set `policy.TokenRequestOptions.EnableMTLSPoP` when requesting
-  tokens directly, or `ClientOptions.EnableMTLSPoP` on a resource client for automatic token
-  acquisition and mutually authenticated resource requests.
+  tokens directly. Updated Key Vault shared authentication automatically signals PoP support;
+  other resource clients can signal it with `ClientOptions.EnableMTLSPoP`.
 - Importing the optional `github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation` module
   enables automatic attested mTLS PoP selection for eligible managed identity requests, including
   those made through `DefaultAzureCredential`. Selection requires a PoP request and MSAL
@@ -15,6 +15,9 @@
   ordinary bearer acquisition is preserved. Selected attestation failures aren't downgraded.
 - `ManagedIdentityCredentialOptions.DisableMTLSPoP` opts a managed identity credential out of
   bound-token acquisition.
+- Authentication errors support standard Go error unwrapping and SDK-internal classification.
+  Credential-chain errors retain individual failures, including cancellation, while nested
+  chains continue to stop on terminal authentication failures.
 
 ### Breaking Changes
 

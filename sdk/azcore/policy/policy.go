@@ -127,11 +127,13 @@ type RetryOptions struct {
 	//   http.StatusGatewayTimeout      504
 	// Specifying values will replace the default values.
 	// Specifying an empty slice will disable retries for HTTP status codes.
+	// Service-specific response classification may identify additional retryable
+	// responses. Use ShouldRetry to override that classification.
 	StatusCodes []int
 
 	// ShouldRetry evaluates if the retry policy should retry the request.
 	// When specified, the function overrides comparison against the list of
-	// HTTP status codes and error checking within the retry policy. Context
+	// HTTP status codes, service-specific response classification, and error checking within the retry policy. Context
 	// and NonRetriable errors remain evaluated before calling ShouldRetry.
 	// The *http.Response and error parameters are mutually exclusive, i.e.
 	// if one is nil, the other is not nil.

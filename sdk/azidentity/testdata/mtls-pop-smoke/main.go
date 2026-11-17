@@ -151,7 +151,7 @@ func run(ctx context.Context, cfg configuration) error {
 	if err := verifySDK(ctx, cfg, sdkCredential); err != nil {
 		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
 	}
-	fmt.Println("PASS: Key Vault SDK reads secret twice with ClientOptions.EnableMTLSPoP")
+	fmt.Println("PASS: Key Vault SDK reads secret twice with automatic mTLS PoP signaling")
 	if cfg.dac {
 		fmt.Println("PASS: fresh DefaultAzureCredential completes automatic SDK mTLS PoP reads")
 	}
@@ -255,7 +255,7 @@ func (c configuration) identity() azidentity.ManagedIDKind {
 }
 
 func verifyBuild(info *debug.BuildInfo) error {
-	for _, name := range []string{"azcore", "azidentity"} {
+	for _, name := range []string{"azcore", "azidentity", "internal", "security/keyvault/internal"} {
 		path := "github.com/Azure/azure-sdk-for-go/sdk/" + name
 		local := false
 		for _, dep := range info.Deps {
@@ -514,7 +514,6 @@ func newSecretClient(cfg configuration, credential azcore.TokenCredential, optio
 	if options != nil {
 		cp = *options
 	}
-	cp.EnableMTLSPoP = true
 	cp.Retry.MaxRetries = -1
 	return azsecrets.NewClient(cfg.vaultURL, credential, &cp)
 }

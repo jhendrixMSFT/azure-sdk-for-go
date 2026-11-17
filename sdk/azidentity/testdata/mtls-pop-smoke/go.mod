@@ -32,4 +32,8 @@ replace github.com/Azure/azure-sdk-for-go/sdk/azidentity => ../..
 
 replace github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation => ../../attestation
 
+replace github.com/Azure/azure-sdk-for-go/sdk/internal => ../../../internal
+
+replace github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal => ../../../security/keyvault/internal
+
 replace github.com/AzureAD/microsoft-authentication-library-for-go => C:\git\AzureAD\microsoft-authentication-library-for-go

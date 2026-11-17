@@ -4,7 +4,8 @@ go 1.26.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.1-beta.1
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation v0.1.0-beta.1
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.5.0
 	github.com/stretchr/testify v1.12.1
 )
@@ -28,5 +29,7 @@ require (
 replace github.com/Azure/azure-sdk-for-go/sdk/azcore => ../../../azcore
 
 replace github.com/Azure/azure-sdk-for-go/sdk/azidentity => ../..
+
+replace github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation => ../../attestation
 
 replace github.com/AzureAD/microsoft-authentication-library-for-go => C:\git\AzureAD\microsoft-authentication-library-for-go

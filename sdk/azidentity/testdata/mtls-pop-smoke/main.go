@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
@@ -37,7 +38,6 @@ type configuration struct {
 	vaultURL, secretName           string
 	clientID, objectID, resourceID string
 	timeout                        time.Duration
-	attestation                    bool
 	concurrency                    int
 	isolationClientID              string
 	dac                            bool
@@ -50,7 +50,6 @@ func main() {
 	flag.StringVar(&cfg.clientID, "client-id", "", "User-assigned identity client ID; omit all identity flags for system-assigned")
 	flag.StringVar(&cfg.objectID, "object-id", "", "User-assigned identity object ID (mutually exclusive with other identity flags)")
 	flag.StringVar(&cfg.resourceID, "resource-id", "", "User-assigned identity resource ID (mutually exclusive with other identity flags)")
-	flag.BoolVar(&cfg.attestation, "attestation", false, "Request KeyGuard key attestation (requires AttestationClientLib.dll and the x64 Visual C++ runtime)")
 	flag.BoolVar(&cfg.dac, "dac", false, "Use DefaultAzureCredential; requires AZURE_TOKEN_CREDENTIALS=prod and matching AZURE_CLIENT_ID for UAMI")
 	flag.IntVar(&cfg.concurrency, "concurrency", 0, "Opt in to shared/multiple-client concurrent reads with 2-8 workers; zero disables")
 	flag.StringVar(&cfg.isolationClientID, "isolation-client-id", "", "Opt in to alternating system-assigned and this UAMI client ID; both must read the secret")
@@ -166,7 +165,7 @@ func run(ctx context.Context, cfg configuration) error {
 		var credentials [2]azcore.TokenCredential
 		for i, id := range []azidentity.ManagedIDKind{nil, azidentity.ClientID(cfg.isolationClientID)} {
 			credentials[i], err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-				ID: id, EnableAttestation: cfg.attestation,
+				ID: id,
 			})
 			if err != nil {
 				return fmt.Errorf("creating identity-isolation credential #%d: %w", i+1, err)
@@ -211,13 +210,13 @@ func (c configuration) validate() error {
 func newSmokeCredential(cfg configuration) (azcore.TokenCredential, error) {
 	if !cfg.dac {
 		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-			ID: cfg.identity(), EnableAttestation: cfg.attestation,
+			ID: cfg.identity(),
 		})
 	}
 	if err := validateDACEnvironment(cfg); err != nil {
 		return nil, err
 	}
-	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{EnableAttestation: cfg.attestation})
+	return azidentity.NewDefaultAzureCredential(nil)
 }
 
 func validateDACEnvironment(cfg configuration) error {

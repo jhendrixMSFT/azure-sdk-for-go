@@ -92,14 +92,14 @@ The app runs **on the VM** and authenticates as its managed identity, not the
 Azure CLI account. It doesn't need Azure CLI on the VM, a client secret, or a
 tenant-ID argument.
 
-If IMDS requires attested issuance, pass `-attestation` to set
-`ManagedIdentityCredentialOptions.EnableAttestation`. Deploy `AttestationClientLib.dll`
+The app blank-imports `azidentity/attestation`, automatically enabling attested issuance
+for eligible mTLS PoP requests; there is no `-attestation` flag. Deploy `AttestationClientLib.dll`
 from the `Microsoft.Azure.Security.KeyGuardAttestation` package
 (`runtimes/win-x64/native`) alongside the executable or into System32, and install
 the [x64 Microsoft Visual C++ 2015-2022 Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
-The DLL isn't loaded from the working directory or `PATH`. Attestation is disabled
-by default; deploying the DLL alone doesn't enable it. When enabled, attestation
-failures fail acquisition without falling back to an unattested credential.
+The DLL isn't loaded from the working directory or `PATH`. Deploying the DLL alone
+doesn't activate attestation in an application without the import. Once selected,
+attestation failures fail acquisition without falling back to an unattested credential.
 Ordinary bearer requests remain unchanged.
 
 ## Build and run
@@ -125,10 +125,10 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 ```
 
 Alternatively select a user-assigned identity with `-object-id` or `-resource-id`.
-Only one identity selector is permitted. Add `-attestation` to either command
-when IMDS requires key attestation. The default overall timeout is five
+Only one identity selector is permitted. Attestation selection is automatic.
+The default overall timeout is five
 minutes; override with `-timeout 10m`. To build elsewhere and copy to the VM,
-preserve the two relative module replacements and build with `GOOS=windows`
+preserve the three relative SDK module replacements and build with `GOOS=windows`
 and the VM's `GOARCH`. Also point the MSAL replacement at the feature checkout on
 the build machine. The VM doesn't need Go to run the executable.
 Copy the newly built executable to the VM and run it there from a clean
@@ -150,7 +150,7 @@ or a reboot.
 These are bounded, on-demand additions, disabled unless explicitly selected:
 
 ```powershell
-.\mtls-pop-smoke.exe -attestation `
+.\mtls-pop-smoke.exe `
     -vault-url "https://<vault-name>.vault.azure.net" `
     -secret-name "<existing-test-secret>" `
     -concurrency 4 `
@@ -199,12 +199,12 @@ change the environment itself.
 ```powershell
 $env:AZURE_TOKEN_CREDENTIALS = "prod"
 # AZURE_CLIENT_ID must be unset (not merely empty) for system-assigned identity.
-.\mtls-pop-smoke.exe -dac -attestation `
+.\mtls-pop-smoke.exe -dac `
     -vault-url "https://<vault-name>.vault.azure.net" `
     -secret-name "<existing-test-secret>"
 
 $env:AZURE_CLIENT_ID = "<user-assigned-client-id-guid>"
-.\mtls-pop-smoke.exe -dac -attestation `
+.\mtls-pop-smoke.exe -dac `
     -client-id $env:AZURE_CLIENT_ID `
     -vault-url "https://<vault-name>.vault.azure.net" `
     -secret-name "<existing-test-secret>"
@@ -213,7 +213,7 @@ $env:AZURE_CLIENT_ID = "<user-assigned-client-id-guid>"
 DAC supports UAMI selection by client ID only. The environment value must match
 `-client-id`; the app also checks the returned token's identity. Run
 `-isolation-client-id` separately without `-dac`. `-concurrency` works with DAC.
-`-attestation` maps to `DefaultAzureCredentialOptions.EnableAttestation`.
+The blank import activates the same automatic selection for DAC's managed identity credential.
 
 The first call on a cold DAC explicitly requests PoP, exercising the managed
 identity probe and bound-token acquisition before bearer selection. Automatic
@@ -226,7 +226,8 @@ one-second limit on attestation or the entire token/resource flow.
 Fixture-free DAC regressions in the ordinary `azidentity` suite verify real
 MSAL v2/v1 probe requests, one-second timeout/cancellation, no retries,
 recovery after timeout, caller-deadline preservation, no repeated discovery
-after success, and attestation-option propagation. They deliberately simulate
+after success, reuse of bounded-probe capabilities for PoP selection, and propagation
+of attestation and minimum KeyGuard strength to MSAL. Real-MSAL probe tests simulate
 IMDSv1 discovery to avoid creating native keys. An unrelated HTTP response is no
 longer treated as proof that an IMDS source exists.
 
@@ -293,10 +294,12 @@ leaves this transport configuration to `azcore`.
 ## Failure interpretation
 
 - Acquisition failure: inspect Windows Credential Guard/KeyGuard, IMDSv2,
-  identity assignment, Entra connectivity, and resource opt-in. Unsupported hosts
-  fail; there's no fallback to another credential.
-- IMDS reports "Attestation Token is missing / empty": rebuild and run with
-  `-attestation`, with the attestation DLL and x64 Visual C++ runtime installed.
+  identity assignment, Entra connectivity, and resource opt-in. The SDK selects bearer
+  on a known unsupported host; this app requires a bound token and reports that as a
+  smoke-test failure. Selected attestation failures don't continue to another credential.
+- IMDS reports "Attestation Token is missing / empty": rebuild from the current checkout,
+  retaining the attestation blank import and local module replacement, with the
+  attestation DLL and x64 Visual C++ runtime installed.
   If attestation itself fails, inspect the reported native-library or attestation
   error rather than disabling attestation.
 - Direct request HTTP 403/404: check token-binding opt-in, network restrictions,
@@ -336,9 +339,14 @@ that module; the hardware-backed smoke test remains an on-demand check, not a
 CI prerequisite.
 The following fixture-free regressions are in the normal SDK module suites:
 
-- `azidentity`: attestation and PoP option propagation, binding-certificate
-  propagation, failure without downgrade, and certificate-scoped acquisition
-  pipelines that preserve middleware and caller-owned transports.
+- `azidentity`: automatic selection gates (including no import, opt-out, unsupported
+  hosts, and discovery failures), MSAL attestation and minimum-strength options,
+  binding-certificate propagation, failure without downgrade, and certificate-scoped
+  acquisition pipelines that preserve middleware and caller-owned transports.
+- `azidentity/attestation`: a separate imported test binary verifies activation,
+  unsupported-host bearer selection, opt-out, ordinary bearer requests, and
+  construction without discovery. These tests run from the optional module, not
+  as part of the parent module's `go test ./...`.
 - `azidentity`: on Windows, real MSAL IMDSv2 metadata requests select the requested
   client, object, or resource ID (or the system-assigned identity). A mocked
   metadata rejection stops the test before native key creation, attestation, or

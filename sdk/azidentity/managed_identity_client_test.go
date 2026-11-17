@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,26 +61,30 @@ func TestManagedIdentityCredential_UserAgent(t *testing.T) {
 }
 
 func TestManagedIdentityCredential_MTLSPoP(t *testing.T) {
-	setEnvironmentVariables(t, map[string]string{
-		identityEndpoint: "http://localhost/identity", identityHeader: "secret",
-		identityServerThumbprint: "", msiEndpoint: "", msiSecret: "", arcIMDSEndpoint: "",
-	})
-	// App Service rejects the mTLS option before making any HTTP request.
-	msal, err := managedidentity.New(managedidentity.SystemAssigned())
-	require.NoError(t, err)
 	c, err := NewManagedIdentityCredential(nil)
 	require.NoError(t, err)
-	c.mic.msalClient = fakeManagedIdentityClient{acquireToken: func(ctx context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
-		assert.Equal(t, "https://vault.azure.net", resource)
-		return msal.AcquireToken(ctx, resource, opts...)
-	}}
+	c.mic.msalClient = fakeManagedIdentityClient{
+		capabilities: func(context.Context) (managedidentity.Capabilities, error) {
+			t.Fatal("an application without the optional import must not discover PoP capabilities")
+			return managedidentity.Capabilities{}, nil
+		},
+		acquireToken: func(_ context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+			assert.Equal(t, "https://vault.azure.net", resource)
+			var got, want managedidentity.AcquireTokenOptions
+			for _, opt := range opts {
+				opt(&got)
+			}
+			managedidentity.WithClaims("")(&want)
+			assert.Equal(t, want, got, "PoP support without the import must still acquire an ordinary token")
+			return managedidentity.AuthResult{AccessToken: tokenValue}, nil
+		},
+	}
 	token, err := c.GetToken(context.Background(), policy.TokenRequestOptions{
 		Scopes: []string{"https://vault.azure.net/.default"}, EnableMTLSPoP: true,
 	})
-	require.ErrorContains(t, err, managedidentity.ErrMtlsPoPNotSupportedForSource.Error())
-	var authErr *AuthenticationFailedError
-	require.ErrorAs(t, err, &authErr)
-	require.Equal(t, azcore.AccessToken{}, token)
+	require.NoError(t, err)
+	assert.Equal(t, tokenValue, token.Token)
+	assert.Nil(t, token.BindingCertificate)
 }
 
 func TestManagedIdentityCredential_MTLSPoPIdentitySelection(t *testing.T) {
@@ -111,7 +116,7 @@ func TestManagedIdentityCredential_MTLSPoPIdentitySelection(t *testing.T) {
 				wantQuery.Set(tc.parameter, tc.id.String())
 			}
 			c, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{
-				ID: tc.id, EnableAttestation: true,
+				ID: tc.id,
 				ClientOptions: azcore.ClientOptions{
 					Transport: srv,
 					Retry:     policy.RetryOptions{MaxRetries: -1},
@@ -128,13 +133,11 @@ func TestManagedIdentityCredential_MTLSPoPIdentitySelection(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			token, err := c.GetToken(context.Background(), policy.TokenRequestOptions{
-				Scopes: []string{t.Name()}, EnableMTLSPoP: true,
-			})
+			// Exercise the SDK-created MSAL client's identity mapping directly. Eligibility
+			// selection is covered separately without relying on native host capabilities.
+			_, err = c.mic.msalClient.AcquireToken(context.Background(), t.Name(),
+				managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport())
 			require.ErrorContains(t, err, "offline metadata rejection")
-			var authErr *AuthenticationFailedError
-			require.ErrorAs(t, err, &authErr)
-			assert.Equal(t, azcore.AccessToken{}, token)
 			assert.Equal(t, 1, srv.Requests(), "a failed mTLS request must not fall back to IMDSv1")
 		})
 	}
@@ -146,62 +149,80 @@ func TestManagedIdentityCredential_Attestation(t *testing.T) {
 		msiEndpoint: "", msiSecret: "", arcIMDSEndpoint: "",
 	})
 	for _, tc := range []struct {
-		name              string
-		enableAttestation bool
-		enableMTLSPoP     bool
-		wantOptions       []managedidentity.AcquireTokenOption
-		tokenErr          error
+		name                             string
+		registered, requestPoP, disabled bool
+		strength                         managedidentity.MtlsBindingStrength
+		reason                           string
+		tokenErr                         error
 	}{
+		{name: "not imported", requestPoP: true, strength: managedidentity.MtlsBindingStrengthKeyGuard},
+		{name: "ordinary bearer", registered: true, strength: managedidentity.MtlsBindingStrengthKeyGuard},
+		{name: "opt out", registered: true, requestPoP: true, disabled: true, strength: managedidentity.MtlsBindingStrengthKeyGuard},
+		{name: "unsupported host", registered: true, requestPoP: true, reason: "host doesn't support KeyGuard"},
+		{name: "software binding", registered: true, requestPoP: true, strength: managedidentity.MtlsBindingStrengthSoftware},
+		{name: "attested PoP", registered: true, requestPoP: true, strength: managedidentity.MtlsBindingStrengthKeyGuard},
 		{
-			name: "unattested PoP", enableMTLSPoP: true,
-			wantOptions: []managedidentity.AcquireTokenOption{managedidentity.WithMtlsProofOfPossession()},
-		},
-		{
-			name: "bearer with attestation enabled", enableAttestation: true,
-		},
-		{
-			name: "attested PoP", enableAttestation: true, enableMTLSPoP: true,
-			wantOptions: []managedidentity.AcquireTokenOption{
-				managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport(),
-			},
-		},
-		{
-			name: "attestation unavailable", enableAttestation: true, enableMTLSPoP: true,
-			wantOptions: []managedidentity.AcquireTokenOption{
-				managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport(),
-			},
+			name: "attestation unavailable", registered: true, requestPoP: true, strength: managedidentity.MtlsBindingStrengthKeyGuard,
 			tokenErr: managedidentity.ErrAttestationUnavailable,
+		},
+		{
+			name: "IMDS rejects attestation", registered: true, requestPoP: true, strength: managedidentity.MtlsBindingStrengthKeyGuard,
+			tokenErr: newAuthenticationFailedError(credNameManagedIdentity, "attestation rejected", &http.Response{
+				StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader("attestation rejected")),
+			}),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{EnableAttestation: tc.enableAttestation})
+			options := ManagedIdentityCredentialOptions{DisableMTLSPoP: tc.disabled}
+			c, err := NewManagedIdentityCredential(&options)
 			require.NoError(t, err)
+			assert.False(t, c.mic.attestationAvailable(), "the parent module's test binary must not import the integration")
+			if tc.registered {
+				c.mic.attestationAvailable = func() bool { return true }
+			}
+			options.DisableMTLSPoP = !tc.disabled
 			const claims = `{"access_token":{"test":"claim"}}`
 			var want managedidentity.AcquireTokenOptions
 			managedidentity.WithClaims(claims)(&want)
-			for _, opt := range tc.wantOptions {
-				opt(&want)
+			discover := tc.registered && tc.requestPoP && !tc.disabled
+			selected := discover && tc.strength >= managedidentity.MtlsBindingStrengthKeyGuard
+			if selected {
+				managedidentity.WithMtlsProofOfPossession()(&want)
+				managedidentity.WithAttestationSupport()(&want)
+				managedidentity.WithMtlsPoPMinStrength(managedidentity.MtlsBindingStrengthKeyGuard)(&want)
 			}
-			calls := 0
-			c.mic.msalClient = fakeManagedIdentityClient{acquireToken: func(_ context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
-				calls++
-				assert.Equal(t, "https://vault.azure.net", resource)
-				var got managedidentity.AcquireTokenOptions
-				for _, opt := range opts {
-					opt(&got)
-				}
-				assert.Equal(t, want, got)
-				if tc.tokenErr != nil {
-					return managedidentity.AuthResult{}, tc.tokenErr
-				}
-				return managedidentity.AuthResult{AccessToken: tokenValue}, nil
-			}}
+			calls, probes := 0, 0
+			c.mic.msalClient = fakeManagedIdentityClient{
+				capabilities: func(context.Context) (managedidentity.Capabilities, error) {
+					probes++
+					return managedidentity.Capabilities{
+						Source: managedidentity.DefaultToIMDS, MaxSupportedBindingStrength: tc.strength, ErrorReason: tc.reason,
+					}, nil
+				},
+				acquireToken: func(_ context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+					calls++
+					assert.Equal(t, "https://vault.azure.net", resource)
+					var got managedidentity.AcquireTokenOptions
+					for _, opt := range opts {
+						opt(&got)
+					}
+					assert.Equal(t, want, got)
+					if tc.tokenErr != nil {
+						return managedidentity.AuthResult{}, tc.tokenErr
+					}
+					return managedidentity.AuthResult{AccessToken: tokenValue}, nil
+				},
+			}
 			token, err := c.GetToken(context.Background(), policy.TokenRequestOptions{
-				Scopes: []string{"https://vault.azure.net/.default"}, Claims: claims, EnableMTLSPoP: tc.enableMTLSPoP,
+				Scopes: []string{"https://vault.azure.net/.default"}, Claims: claims, EnableMTLSPoP: tc.requestPoP,
 			})
 			assert.Equal(t, 1, calls, "attestation failure must not trigger an unattested fallback")
+			if discover {
+				assert.Equal(t, 1, probes)
+			} else {
+				assert.Zero(t, probes, "bearer, unimported, and opted-out requests must not discover PoP capabilities")
+			}
 			if tc.tokenErr != nil {
-				require.ErrorContains(t, err, tc.tokenErr.Error())
 				var authErr *AuthenticationFailedError
 				require.ErrorAs(t, err, &authErr)
 				assert.Equal(t, azcore.AccessToken{}, token)
@@ -231,6 +252,42 @@ func TestManagedIdentityCredential_BindingCertificate(t *testing.T) {
 		assert.Equal(t, now.UTC(), token.ExpiresOn)
 		assert.Equal(t, ar.Metadata.RefreshOn.UTC(), token.RefreshOn)
 		assert.Same(t, ar.BindingCertificate, token.BindingCertificate)
+	}
+}
+
+func TestManagedIdentityCredential_CapabilityFailure(t *testing.T) {
+	for _, chained := range []bool{false, true} {
+		for _, expected := range []error{errors.New("discovery failed"), context.Canceled, context.DeadlineExceeded, nil} {
+			name := "no detected source"
+			if expected != nil {
+				name = expected.Error()
+			}
+			t.Run(fmt.Sprintf("%s/chained=%t", name, chained), func(t *testing.T) {
+				c, err := NewManagedIdentityCredential(nil)
+				require.NoError(t, err)
+				c.mic.attestationAvailable = func() bool { return true }
+				c.mic.chained = chained
+				c.mic.msalClient = fakeManagedIdentityClient{
+					capabilities: func(context.Context) (managedidentity.Capabilities, error) {
+						return managedidentity.Capabilities{ErrorReason: "no source"}, expected
+					},
+					acquireToken: func(context.Context, string, ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+						t.Fatal("discovery failure must not trigger bearer acquisition")
+						return managedidentity.AuthResult{}, nil
+					},
+				}
+				_, err = c.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{t.Name()}, EnableMTLSPoP: true})
+				if errors.Is(expected, context.Canceled) || errors.Is(expected, context.DeadlineExceeded) {
+					require.ErrorIs(t, err, expected)
+				} else if chained {
+					var unavailable credentialUnavailable
+					require.ErrorAs(t, err, &unavailable)
+				} else {
+					var authenticationFailed *AuthenticationFailedError
+					require.ErrorAs(t, err, &authenticationFailed)
+				}
+			})
+		}
 	}
 }
 

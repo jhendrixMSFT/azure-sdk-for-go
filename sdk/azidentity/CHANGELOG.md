@@ -8,10 +8,13 @@
   Credential Guard and IMDSv2. Set `policy.TokenRequestOptions.EnableMTLSPoP` when requesting
   tokens directly, or `ClientOptions.EnableMTLSPoP` on a resource client for automatic token
   acquisition and mutually authenticated resource requests.
-- `ManagedIdentityCredentialOptions.EnableAttestation` enables KeyGuard key attestation for
-  mTLS PoP token acquisition when IMDS requires an attested binding key.
-- `DefaultAzureCredentialOptions.EnableAttestation` enables the same attestation support for
-  the managed identity credential in the default chain.
+- Importing the optional `github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation` module
+  enables automatic attested mTLS PoP selection for eligible managed identity requests, including
+  those made through `DefaultAzureCredential`. Selection requires a PoP request and MSAL
+  capabilities reporting KeyGuard support. Without the import or on a known unsupported host,
+  ordinary bearer acquisition is preserved. Selected attestation failures aren't downgraded.
+- `ManagedIdentityCredentialOptions.DisableMTLSPoP` opts a managed identity credential out of
+  bound-token acquisition.
 
 ### Breaking Changes
 

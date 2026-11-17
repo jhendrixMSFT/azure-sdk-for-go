@@ -4,9 +4,10 @@
 
 - Last updated: 2026-11-17.
 - Working branch: `mtls-pop-1`, based on the existing mTLS PoP implementation.
-- Current phase: phase 2 implemented and validated; phase 3 ready to start.
+- Current phase: phases 2 and 3 implemented and validated; phase 4 is next.
 - Automatic managed identity eligibility selection and blank-import activation
-  are not implemented yet. Service defaults are unchanged.
+  are implemented. Service defaults, tenant fallback, and binding-error retries
+  remain unchanged pending phase 4.
 - None of the mTLS PoP work to date has been released in any form. Public
   surface added by this work can be renamed or removed without a deprecation
   period or compatibility shim. Previously released SDK APIs remain unaffected.
@@ -224,7 +225,7 @@ current `CGO_ENABLED=0` toolchain configuration.
 
 ### 3. Add optional activation and credential selection
 
-**Status: ready to start; stage 1 and 2 prerequisites satisfied.**
+**Status: implemented and validated offline.**
 
 - Add the `azidentity/attestation` module and documented blank-import package.
 - Initialization only registers the integration. It must not load native
@@ -243,6 +244,51 @@ current `CGO_ENABLED=0` toolchain configuration.
 **Exit criterion:** imported and unimported applications exhibit the agreed
 selection behavior. Test them in separate processes or binaries so registration
 cannot contaminate the no-import case.
+
+Implemented in the [optional module](attestation/README.md) and the existing MIC/MSAL
+adapter. The parent module does not import the optional module. The registration hook
+only records availability, and credentials read it lazily during acquisition so
+construction during package initialization cannot permanently miss activation.
+The MIC opt-out is copied at construction. The superseded unreleased
+`EnableAttestation` fields were removed from MIC and DAC.
+
+Selection requires the request signal, registration, permission, and successful MSAL
+discovery of at least KeyGuard binding strength. Selected acquisitions pass PoP,
+attestation support, and minimum KeyGuard strength together to MSAL. Known unsupported
+hosts use bearer; discovery failures remain failures. Selected attestation errors
+don't enter legacy IMDS bearer error classification or continue the credential chain.
+DAC reuses its initial bounded-probe capabilities for eligibility and retains the
+original acquisition context. No MSAL or native implementation changes were required.
+
+Parent tests cover no-import behavior, selection gates, immutable opt-out, discovery
+failure/cancellation, native-attestation failure, IMDS attestation rejection, binding
+certificates, and DAC probe reuse. A separate imported-module test binary verifies real
+registration and public API behavior against mocked IMDS, without native operations.
+The smoke app now blank-imports the module and no longer accepts `-attestation`;
+its explicit resource PoP signal remains until service integration is completed.
+
+Validation from the relevant module, with `AZURE_RECORD_MODE=live` for fixture-free
+parent tests to avoid starting the recording proxy:
+
+| Command | Result |
+| --- | --- |
+| `go test .\ ./internal/attestation -run '^(TestDefaultAzureCredential\|TestManagedIdentityCredential\|TestManagedIdentityClient\|TestChainedTokenCredential)' -count=1` | Passed |
+| `go test .\ -run '^(TestManagedIdentityCredential_(Attestation\|CapabilityFailure\|MTLSPoP)$\|TestDefaultAzureCredential_(Attestation\|AttestedProbe\|IMDS)$)' -count=3` | Passed |
+| Optional module: `go test ./... -count=3` and `go vet ./...` | Passed |
+| Parent module: `go build ./...` and `go vet ./...` | Passed |
+| Smoke module: `go test ./... -count=1` and `go build -trimpath -o .\mtls-pop-smoke.exe .` | Passed |
+| Smoke module: `go test -mod=readonly -count=1 -run '^(TestDefaultAzureCredential\|TestManagedIdentityCredential\|TestManagedIdentityClient\|TestChainedTokenCredential)' github.com/Azure/azure-sdk-for-go/sdk/azidentity` | Passed against local MSAL feature checkout |
+| Parent and optional modules: `go build ./...` with `GOOS=linux`, `GOARCH=amd64`, then with `GOOS=darwin`, `GOARCH=arm64` | Passed |
+| Optional module: Linux `go test -c` | Cross-compilation passed; not executed |
+
+Optional-module validation used a temporary local workspace with a version-specific
+replacement for the unreleased parent identity version. The releasable optional
+module has no replacements. Final dependency versions and release ordering remain
+phase 6 work.
+
+No phase-3 hardware-backed live tests or race-detector runs were performed.
+Cross-platform checks are compilation only. Phase 4 must still implement automatic
+Key Vault signaling, narrowly classified tenant fallback, and binding-error retries.
 
 ### 4. Enable automatic behavior in Key Vault
 

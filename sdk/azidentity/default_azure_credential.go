@@ -46,11 +46,6 @@ type DefaultAzureCredentialOptions struct {
 	// the application responsible for ensuring the configured authority is valid and trustworthy.
 	DisableInstanceDiscovery bool
 
-	// EnableAttestation requests KeyGuard key attestation when the managed identity credential
-	// acquires an mTLS PoP token. It has no effect on other credentials or ordinary bearer requests.
-	// See [ManagedIdentityCredentialOptions.EnableAttestation] for native prerequisites and behavior.
-	EnableAttestation bool
-
 	// RequireAzureTokenCredentials determines whether NewDefaultAzureCredential returns an error when the environment
 	// variable AZURE_TOKEN_CREDENTIALS has no value.
 	RequireAzureTokenCredentials bool
@@ -171,8 +166,7 @@ func NewDefaultAzureCredential(options *DefaultAzureCredentialOptions) (*Default
 	}
 	if selected&managedIdentity != 0 {
 		o := &ManagedIdentityCredentialOptions{
-			ClientOptions:     options.ClientOptions,
-			EnableAttestation: options.EnableAttestation,
+			ClientOptions: options.ClientOptions,
 			// enable special DefaultAzureCredential behavior (IMDS probing) only when the chain contains another credential
 			dac: selected^managedIdentity != 0,
 		}

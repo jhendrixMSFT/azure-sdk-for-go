@@ -87,12 +87,11 @@ type ManagedIdentityCredentialOptions struct {
 	// and rejects redirects without modifying the caller's client.
 	azcore.ClientOptions
 
-	// EnableAttestation requests attestation of the KeyGuard binding key when GetToken requests
-	// an mTLS PoP token. It has no effect on ordinary bearer token requests and is false by default.
-	// Attestation requires AttestationClientLib.dll from Microsoft.Azure.Security.KeyGuardAttestation
-	// alongside the executable or in System32, and the x64 Microsoft Visual C++ 2015-2022 Redistributable.
-	// When enabled, attestation failures fail token acquisition without falling back to an unattested credential.
-	EnableAttestation bool
+	// DisableMTLSPoP prevents certificate-bound token acquisition, even when requested by the caller.
+	// By default, eligible requests use attested mTLS PoP when the application imports
+	// github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation and the host supports KeyGuard.
+	// Ordinary bearer requests are unchanged.
+	DisableMTLSPoP bool
 
 	// ID of a managed identity the credential should authenticate. Set this field to use a specific identity instead of
 	// the hosting environment's default. The value may be the identity's client, object, or resource ID.
@@ -131,11 +130,13 @@ func NewManagedIdentityCredential(options *ManagedIdentityCredentialOptions) (*M
 }
 
 // GetToken requests an access token from the hosting environment. This method is called automatically by Azure SDK clients.
-// When opts.EnableMTLSPoP is true, it requests a certificate-bound token instead of a bearer token.
-// This requires Windows with Credential Guard enabled and IMDSv2 available. The resource must support
-// mTLS PoP. Enable ClientOptions.EnableMTLSPoP on the resource client to present the token and its
-// binding certificate automatically. Unsupported hosts return an error without falling back to bearer authentication.
-// Set ManagedIdentityCredentialOptions.EnableAttestation when IMDS requires an attested binding key.
+// When opts.EnableMTLSPoP is true, the optional azidentity/attestation integration is imported,
+// and the host supports KeyGuard, it requests an attested certificate-bound token.
+// Otherwise it requests an ordinary bearer token. DisableMTLSPoP opts out of bound tokens.
+// Attested acquisition requires Windows with Credential Guard, IMDSv2, and the native dependencies
+// documented by the attestation package. Once selected, attestation failures aren't downgraded.
+// Callers must inspect the returned BindingCertificate to determine the required authorization
+// scheme and transport. Azure SDK pipelines handle this automatically.
 func (c *ManagedIdentityCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	var err error
 	ctx, endSpan := runtime.StartSpan(ctx, credNameManagedIdentity+"."+traceOpGetToken, c.mic.azClient.Tracer(), nil)

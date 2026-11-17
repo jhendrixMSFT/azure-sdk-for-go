@@ -14,6 +14,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity/internal/attestation"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/log"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/transport"
 	msalerrors "github.com/AzureAD/microsoft-authentication-library-for-go/apps/errors"
@@ -49,10 +50,11 @@ type managedIdentityClient struct {
 	// configure the transport. MSAL applies certificate pinning and the redirect policy via
 	// ConfigureClient, preserving the azcore pipeline's middleware. Its client field holds the
 	// caller-supplied base until ConfigureClient replaces it with the augmented client.
-	configurableClient configurableClient
-	clientOptions      azcore.ClientOptions
-	mtlsChild          bool
-	enableAttestation  bool
+	configurableClient   configurableClient
+	clientOptions        azcore.ClientOptions
+	mtlsChild            bool
+	attestationAvailable func() bool
+	disableMTLSPoP       bool
 }
 
 // setIMDSRetryOptionDefaults sets zero-valued fields to default values appropriate for IMDS
@@ -102,7 +104,10 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 	cp := options.ClientOptions
 	// This option applies to resource requests, not the credential's acquisition pipeline.
 	cp.EnableMTLSPoP = false
-	c := managedIdentityClient{enableAttestation: options.EnableAttestation}
+	c := managedIdentityClient{
+		attestationAvailable: attestation.Registered,
+		disableMTLSPoP:       options.DisableMTLSPoP,
+	}
 	source, err := managedidentity.GetSource()
 	if err != nil {
 		return nil, err
@@ -230,12 +235,15 @@ func (c *managedIdentityClient) ConfigureClient(augment func(*http.Client) (*htt
 
 // authenticate acquires an access token
 func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	var capabilities managedidentity.Capabilities
+	discovered := false
 	// no need to synchronize around this value because it's true only when DefaultAzureCredential constructed the client,
 	// and in that case ChainedTokenCredential.GetToken synchronizes goroutines that would execute this block
 	if c.probeIMDS {
 		cx, cancel := context.WithTimeout(ctx, imdsProbeTimeout)
 		cx = policy.WithRetryOptions(cx, policy.RetryOptions{MaxRetries: -1})
-		capabilities, err := c.msalClient.Capabilities(cx)
+		var err error
+		capabilities, err = c.msalClient.Capabilities(cx)
 		cancel()
 		if err != nil {
 			msg := err.Error()
@@ -248,13 +256,37 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 			return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, "no managed identity endpoint detected: "+capabilities.ErrorReason)
 		}
 		c.probeIMDS = false
+		discovered = true
 	}
 
 	opts := []managedidentity.AcquireTokenOption{managedidentity.WithClaims(tro.Claims)}
-	if tro.EnableMTLSPoP {
-		opts = append(opts, managedidentity.WithMtlsProofOfPossession())
-		if c.enableAttestation {
-			opts = append(opts, managedidentity.WithAttestationSupport())
+	mtls := false
+	if tro.EnableMTLSPoP && !c.disableMTLSPoP && c.attestationAvailable() {
+		if !discovered {
+			var err error
+			capabilities, err = c.msalClient.Capabilities(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return azcore.AccessToken{}, err
+				}
+				if c.chained {
+					return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, err.Error())
+				}
+				return azcore.AccessToken{}, newAuthenticationFailedErrorFromMSAL(credNameManagedIdentity, err)
+			}
+			if capabilities.Source == "" {
+				msg := "no managed identity endpoint detected: " + capabilities.ErrorReason
+				if c.chained {
+					return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, msg)
+				}
+				return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, msg, nil)
+			}
+		}
+		mtls = capabilities.IsMtlsPoPSupportedByHost() &&
+			capabilities.MaxSupportedBindingStrength >= managedidentity.MtlsBindingStrengthKeyGuard
+		if mtls {
+			opts = append(opts, managedidentity.WithMtlsProofOfPossession(), managedidentity.WithAttestationSupport(),
+				managedidentity.WithMtlsPoPMinStrength(managedidentity.MtlsBindingStrengthKeyGuard))
 		}
 	}
 	ar, err := c.msalClient.AcquireToken(ctx, tro.Scopes[0], opts...)
@@ -266,7 +298,7 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 			BindingCertificate: ar.BindingCertificate,
 		}, nil
 	}
-	if c.imds {
+	if c.imds && !mtls {
 		var ije msalerrors.InvalidJsonErr
 		if c.chained && errors.As(err, &ije) {
 			// an unmarshaling error implies the response is from something other than IMDS such as a proxy listening at

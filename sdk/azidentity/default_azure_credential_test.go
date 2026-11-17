@@ -556,21 +556,32 @@ func TestDefaultAzureCredential_IMDS(t *testing.T) {
 
 func TestDefaultAzureCredential_Attestation(t *testing.T) {
 	t.Setenv(azureTokenCredentials, credNameManagedIdentity)
-	for _, enabled := range []bool{false, true} {
-		c, err := NewDefaultAzureCredential(&DefaultAzureCredentialOptions{EnableAttestation: enabled})
+	for _, registered := range []bool{false, true} {
+		c, err := NewDefaultAzureCredential(nil)
 		require.NoError(t, err)
 		require.Len(t, c.chain.sources, 1)
 		mic, ok := c.chain.sources[0].(*ManagedIdentityCredential)
 		require.True(t, ok)
-		assert.Equal(t, enabled, mic.mic.enableAttestation)
+		assert.False(t, mic.mic.attestationAvailable())
+		assert.False(t, mic.mic.disableMTLSPoP, "DAC must permit automatic PoP by default")
+		if registered {
+			mic.mic.attestationAvailable = func() bool { return true }
+		}
 		binding := &tls.Certificate{}
 		var want managedidentity.AcquireTokenOptions
 		managedidentity.WithClaims("claims")(&want)
-		managedidentity.WithMtlsProofOfPossession()(&want)
-		if enabled {
+		if registered {
+			managedidentity.WithMtlsProofOfPossession()(&want)
 			managedidentity.WithAttestationSupport()(&want)
+			managedidentity.WithMtlsPoPMinStrength(managedidentity.MtlsBindingStrengthKeyGuard)(&want)
 		}
 		mic.mic.msalClient = fakeManagedIdentityClient{
+			capabilities: func(context.Context) (managedidentity.Capabilities, error) {
+				require.True(t, registered)
+				return managedidentity.Capabilities{
+					Source: managedidentity.DefaultToIMDS, MaxSupportedBindingStrength: managedidentity.MtlsBindingStrengthKeyGuard,
+				}, nil
+			},
 			acquireToken: func(_ context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
 				assert.Equal(t, "https://vault.azure.net", resource)
 				var got managedidentity.AcquireTokenOptions
@@ -587,6 +598,64 @@ func TestDefaultAzureCredential_Attestation(t *testing.T) {
 		require.NoError(t, err)
 		assert.Same(t, binding, token.BindingCertificate, "DAC must retain MSAL's binding certificate")
 	}
+}
+
+func TestDefaultAzureCredential_AttestedProbe(t *testing.T) {
+	setEnvironmentVariables(t, map[string]string{
+		azureTokenCredentials: "prod", azureTenantID: "", azureClientID: "",
+		azureClientSecret: "", azureFederatedTokenFile: "",
+		identityEndpoint: "", identityHeader: "", identityServerThumbprint: "",
+		msiEndpoint: "", msiSecret: "", arcIMDSEndpoint: "",
+	})
+	require.NoError(t, os.Unsetenv(azureClientID))
+	c, err := NewDefaultAzureCredential(nil)
+	require.NoError(t, err)
+	var mic *ManagedIdentityCredential
+	for _, source := range c.chain.sources {
+		if candidate, ok := source.(*ManagedIdentityCredential); ok {
+			mic = candidate
+		}
+	}
+	require.NotNil(t, mic)
+	mic.mic.attestationAvailable = func() bool { return true }
+	parent, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	probes, acquisitions := 0, 0
+	mic.mic.msalClient = fakeManagedIdentityClient{
+		capabilities: func(probe context.Context) (managedidentity.Capabilities, error) {
+			probes++
+			deadline, ok := probe.Deadline()
+			require.True(t, ok)
+			assert.InDelta(t, 1, time.Until(deadline).Seconds(), 0.1)
+			return managedidentity.Capabilities{
+				Source: managedidentity.DefaultToIMDS, MaxSupportedBindingStrength: managedidentity.MtlsBindingStrengthKeyGuard,
+			}, nil
+		},
+		acquireToken: func(actual context.Context, _ string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {
+			acquisitions++
+			assert.NoError(t, actual.Err(), "canceling the discovery context must not cancel acquisition")
+			deadline, ok := actual.Deadline()
+			require.True(t, ok)
+			parentDeadline, _ := parent.Deadline()
+			assert.Equal(t, parentDeadline, deadline)
+			var got, want managedidentity.AcquireTokenOptions
+			for _, opt := range opts {
+				opt(&got)
+			}
+			managedidentity.WithClaims("")(&want)
+			managedidentity.WithMtlsProofOfPossession()(&want)
+			managedidentity.WithAttestationSupport()(&want)
+			managedidentity.WithMtlsPoPMinStrength(managedidentity.MtlsBindingStrengthKeyGuard)(&want)
+			assert.Equal(t, want, got)
+			return managedidentity.AuthResult{AccessToken: tokenValue, BindingCertificate: &tls.Certificate{}}, nil
+		},
+	}
+	tk, err := c.GetToken(parent, policy.TokenRequestOptions{Scopes: []string{t.Name()}, EnableMTLSPoP: true})
+	require.NoError(t, err)
+	assert.NotNil(t, tk.BindingCertificate)
+	assert.Equal(t, 1, probes, "the initial bounded probe must also supply PoP eligibility")
+	assert.Equal(t, 1, acquisitions)
+	assert.False(t, mic.mic.probeIMDS)
 }
 
 func TestDefaultAzureCredential_UnexpectedIMDSResponse(t *testing.T) {

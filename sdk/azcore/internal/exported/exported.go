@@ -73,10 +73,10 @@ type TokenRequestOptions struct {
 	// in a loop retrying an API call with a token that has been revoked due to CAE.
 	EnableCAE bool
 
-	// EnableMTLSPoP requests a certificate-bound mTLS proof-of-possession token.
-	// Currently supported by azidentity.ManagedIdentityCredential on Windows hosts with
-	// Credential Guard enabled and IMDSv2 available. Callers must verify BindingCertificate
-	// is non-nil because credentials that don't support this option may ignore it.
+	// EnableMTLSPoP indicates that the caller supports certificate-bound mTLS proof-of-possession tokens.
+	// Credentials may return a bearer token when this option is enabled. Callers must inspect
+	// BindingCertificate and use the matching authorization scheme and transport. A certificate-bound
+	// token must never be presented as a bearer token.
 	EnableMTLSPoP bool
 
 	// Scopes contains the list of permission scopes required for the token.

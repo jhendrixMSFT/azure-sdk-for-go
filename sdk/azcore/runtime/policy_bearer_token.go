@@ -19,7 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/temporal"
 )
 
-// BearerTokenPolicy authorizes requests with bearer tokens acquired from a TokenCredential.
+// BearerTokenPolicy authorizes requests with bearer or certificate-bound tokens acquired from a TokenCredential.
 // It handles [Continuous Access Evaluation] (CAE) challenges. Clients needing to handle
 // additional authentication challenges, or needing more control over authorization, should
 // provide a [policy.AuthorizationHandler] in [policy.BearerTokenOptions].
@@ -68,7 +68,7 @@ var shouldRefresh = func(tk exported.AccessToken, _ acquiringResourceState) bool
 	return tk.RefreshOn.Before(time.Now())
 }
 
-// NewBearerTokenPolicy creates a policy object that authorizes requests with bearer tokens.
+// NewBearerTokenPolicy creates a policy object that authorizes requests with bearer or certificate-bound tokens.
 // cred: an azcore.TokenCredential implementation such as a credential object from azidentity
 // scopes: the list of permission scopes required for the token.
 // opts: optional settings. Pass nil to accept default values; this is the same as passing a zero-value options.
@@ -107,13 +107,10 @@ func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(p
 		tro.EnableCAE = true
 		var mtls mtlsRequest
 		req.OperationValue(&mtls)
-		if tro.EnableMTLSPoP && !mtls.enabled {
-			return errorinfo.NonRetriableError(errors.New("mTLS PoP requires ClientOptions.EnableMTLSPoP"))
-		}
-		tro.EnableMTLSPoP = mtls.enabled
+		tro.EnableMTLSPoP = tro.EnableMTLSPoP || mtls.requestPoP
 		as := acquiringResourceState{p: b, req: req, tro: tro}
 		resource := b.mainResource
-		if mtls.enabled {
+		if tro.EnableMTLSPoP {
 			resource = b.mtlsResource
 		}
 		tk, err := resource.Get(as)
@@ -122,19 +119,14 @@ func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(p
 			// retrying authentication, the credential would have done so already
 			return errorinfo.NonRetriableError(err)
 		}
-		if mtls.enabled {
-			if tk.BindingCertificate == nil {
-				return errorinfo.NonRetriableError(errors.New("mTLS PoP was requested but the credential returned no binding certificate"))
-			}
-			mtls.certificate = tk.BindingCertificate
-			req.SetOperationValue(mtls)
+		mtls.certificate = tk.BindingCertificate
+		req.SetOperationValue(mtls)
+		if tk.BindingCertificate != nil {
 			req.Raw().Header.Set(shared.HeaderAuthorization, "mtls_pop "+tk.Token)
 			req.Raw().Header.Set("x-ms-tokenboundauth", "true")
 		} else {
-			if tk.BindingCertificate != nil {
-				return errorinfo.NonRetriableError(errors.New("a certificate-bound token can't be used for bearer authentication"))
-			}
 			req.Raw().Header.Set(shared.HeaderAuthorization, shared.BearerTokenPrefix+tk.Token)
+			req.Raw().Header.Del("x-ms-tokenboundauth")
 		}
 		return nil
 	}

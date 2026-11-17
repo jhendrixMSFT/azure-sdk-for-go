@@ -16,7 +16,7 @@ import (
 )
 
 type mtlsRequest struct {
-	enabled     bool
+	requestPoP  bool
 	certificate *tls.Certificate
 }
 
@@ -33,21 +33,37 @@ func (p *mtlsPolicy) prepare(req *policy.Request) (*http.Response, error) {
 	if req.Raw().URL.Scheme != "https" {
 		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires HTTPS"))
 	}
-	req.SetOperationValue(mtlsRequest{enabled: true})
+	req.SetOperationValue(mtlsRequest{requestPoP: true})
 	return req.Next()
 }
 
 func (p *mtlsPolicy) Do(req *policy.Request) (*http.Response, error) {
 	var mtls mtlsRequest
-	if !req.OperationValue(&mtls) || !mtls.enabled {
-		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
-	}
+	req.OperationValue(&mtls)
 	if mtls.certificate == nil {
-		for header := range req.Raw().Header {
-			if strings.EqualFold(header, "Authorization") || strings.EqualFold(header, "x-ms-tokenboundauth") {
+		if !mtls.requestPoP {
+			return req.Next()
+		}
+		hasAuthorization := false
+		for header, values := range req.Raw().Header {
+			if strings.EqualFold(header, "x-ms-tokenboundauth") {
 				return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
 			}
+			if strings.EqualFold(header, "Authorization") {
+				hasAuthorization = true
+				for _, value := range values {
+					if fields := strings.Fields(value); len(fields) > 0 && strings.EqualFold(fields[0], "mtls_pop") {
+						return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
+					}
+				}
+			}
 		}
+		if hasAuthorization {
+			return req.Next()
+		}
+	}
+	if req.Raw().URL.Scheme != "https" {
+		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires HTTPS"))
 	}
 	client, err := p.client(mtls.certificate)
 	if err != nil {

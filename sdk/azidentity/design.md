@@ -1,0 +1,372 @@
+# Automatic attested managed identity mTLS PoP
+
+## Status
+
+- Last updated: 2026-11-17.
+- Working branch: `mtls-pop-1`, based on the existing mTLS PoP implementation.
+- Current phase: phase 2 implemented and validated; phase 3 ready to start.
+- Automatic managed identity eligibility selection and blank-import activation
+  are not implemented yet. Service defaults are unchanged.
+- None of the mTLS PoP work to date has been released in any form. Public
+  surface added by this work can be renamed or removed without a deprecation
+  period or compatibility shim. Previously released SDK APIs remain unaffected.
+
+This is a living record of decisions, implementation order, validation, and
+remaining work. Update the relevant status and decision entries as work lands.
+Distinguish tested baseline behavior from proposed behavior.
+
+## Goal
+
+The tested C# implementation is the north star for behavior and customer
+experience. Match it unless an existing Go SDK design or language constraint
+requires a deviation; convenience or preserving our unreleased implementation
+is not sufficient justification. Use a documented Go blank import instead of
+an optional NuGet reference:
+
+```go
+import _ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation"
+```
+
+Applications would then construct ordinary `ManagedIdentityCredential` or
+`DefaultAzureCredential` instances and PoP-aware service clients without setting
+attestation or PoP enable flags. Eligible requests would automatically use
+attested mTLS PoP. Ordinary bearer requests would remain ordinary bearer requests.
+
+The import makes the integration available; it does not require every credential,
+request, or service to use attestation. Native DLL and runtime deployment
+prerequisites remain necessary.
+
+## Confirmed decisions
+
+| Decision | Status |
+| --- | --- |
+| Use a documented blank import rather than a build tag as the primary opt-in mechanism. | Agreed |
+| The optional module is `github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation`. | Agreed |
+| C# is the behavioral reference; deviate only for documented existing SDK design or language constraints. | Agreed |
+| All surface introduced by this unreleased work may be renamed or removed; no legacy enable-flag compatibility layer is required. | Confirmed |
+| Target the automatic C# experience rather than requiring customers to set multiple enable flags. | Agreed |
+| Do not introduce a new customer-facing strict-mode option for this work. | Agreed |
+| Use a zero-value-friendly MIC opt-out, initially named `DisableMTLSPoP bool`; do not add another public DAC option. Remove superseded unreleased enable flags. | Agreed |
+| Use a minimal internal registration hook that records availability only; keep native work lazy and in MSAL. Do not add a public registration/provider framework. | Agreed |
+| Preserve ordinary bearer requests and caller transport configuration. Return an explicit error if a bound request cannot safely apply its certificate; never silently downgrade or discard caller configuration. | Agreed |
+| Initially enable automatic behavior for Key Vault clients using the shared authentication policy, with secret reads as the first live validation target. Other services remain unchanged. | Agreed |
+| Choose reasonable initial public names during implementation; naming is not a blocker. Perform a final naming cleanup before release. | Agreed |
+| Keep hardware-backed live tests on demand; use fixture-free tests for routine regression protection. | Established testing approach |
+
+Only an actual package import activates a Go package. Adding a requirement to
+`go.mod` alone is not activation. A transitive import can activate the integration
+as well, which must be documented.
+
+## C#-aligned behavior contract
+
+This table describes the target automatic SDK path, checked against the
+[pinned C# sources](#reference-implementation). It is not a description of
+the current Go implementation. The constraint-driven adaptations below are
+agreed; initial Go API names remain provisional for a final cleanup pass.
+
+| Condition | Intended outcome |
+| --- | --- |
+| Integration not imported | Do not select the attested PoP path; use ordinary authentication. |
+| Request does not ask for PoP, or managed identity PoP is explicitly disabled | Ordinary bearer acquisition; do not perform attestation. |
+| Imported, PoP-aware client, managed identity PoP permitted, host reports mTLS PoP support and at least KeyGuard binding strength | Automatic attested mTLS PoP. |
+| Capability discovery succeeds but the host does not meet the PoP/KeyGuard requirements | Ordinary managed identity bearer acquisition. |
+| Non-managed-identity credential selected | Preserve that credential's supported authentication behavior; the service's PoP signal is not a universal bound-token requirement. |
+| Capability discovery fails or is canceled | Preserve error, cancellation, and normal credential-chain classification; do not equate discovery failure with known lack of support. |
+| Token acquisition fails with the specifically classified tenant denial `AADSTS3921996` | Acquire a fresh bearer token with PoP disabled and remember the decision for that tenant in the Key Vault policy's credential wrapper for the client lifetime. |
+| Attestation selected but fails, including a missing or unusable native dependency | Surface the failure; do not silently retry without attestation. |
+| Bound Key Vault request receives HTTP 401 with `[MtlsCnfClaimRequestDataValidationFailed]` | Classify as retriable under the configured outer retry policy; do not downgrade to bearer or add an unbounded authentication resend loop. |
+| RBAC denial, other binding failure, or unrelated network/service failure | Preserve normal retry/error handling; do not treat the failure as permission to downgrade to bearer. |
+| Custom transport cannot apply the binding certificate | Not a C# bearer-fallback trigger. Define the Go transport adaptation explicitly; do not silently change authentication strength. |
+
+Attestation is performed when needed for credential issuance, not necessarily
+on every token request or service operation. Existing valid caches remain usable
+subject to their binding and attestation guarantees.
+
+Fallback is not a generic catch-and-retry policy. In particular, Key Vault
+authorization failures are not equivalent to an Entra tenant-eligibility denial.
+The tenant classifier must preserve the C# distinctions for cancellation and
+mixed credential-chain failures rather than accepting any error text containing
+the denial code. Its memory is tenant-keyed and local to the wrapper, not
+process-wide. Fallback requires a new token acquisition, not relabeling a bound
+token's authorization scheme.
+
+### C# reference details
+
+- The service policy requests PoP; a direct token request defaults to not requesting
+  PoP. Importing the integration must not change that request-level default.
+- MIC permits PoP by default. In the pinned C# version,
+  `ManagedIdentityCredentialOptions.EnableMtlsProofOfPossession` is public and
+  defaults to `true`. DAC also defaults its managed identity path to enabled,
+  but its corresponding option is internal; do not assume public DAC opt-out
+  surface is needed for parity.
+- The Azure.Core MSAL adapter selects attested PoP only when the request,
+  credential setting, host capabilities, and optional managed extension permit it.
+  An absent or unresolvable optional managed extension prevents selection. This
+  differs from failure of native attestation after that path has been selected.
+- The configured MSAL minimum binding strength is KeyGuard, not simply any
+  certificate-bound or IMDSv2-capable host.
+- C# updates the resource transport for a returned binding certificate. Its
+  transport-update path does not request a bearer token when a custom transport
+  cannot accept that update.
+- The Key Vault policy adds `x-ms-tokenboundauth` for `mtls_pop` authorization
+  and removes it for ordinary authorization.
+
+### Constraint-driven adaptations
+
+| Constraint | Adaptation | Status |
+| --- | --- | --- |
+| A Go module requirement does not initialize its packages; Go has no equivalent of the C# optional assembly lookup. | Documented blank import with process-wide registration. | Agreed |
+| Go options must preserve equivalent behavior for nil and zero-valued options; a plain enable bool cannot distinguish unset from explicitly false. | Use a MIC `DisableMTLSPoP bool` opt-out: the zero value permits automatic PoP when eligible. The initial name is provisional. | Agreed |
+| Go and C# expose different transport extension mechanisms. | Preserve caller transport configuration and ordinary bearer behavior. Return an explicit error when a bound request cannot safely apply its certificate; do not silently downgrade. Resolve transport mechanics in phase 2. | Agreed |
+
+Record any additional deviation here with its concrete constraint, C# reference
+behavior, Go adaptation, behavioral impact, and approval status before adopting it.
+
+## Implementation plan
+
+Each stage includes focused offline tests. Keep intermediate changes testable
+and avoid enabling new service defaults before the underlying paths are ready.
+
+### 1. Finalize semantics and API shape
+
+**Status: design decisions complete; implementation preparation remains.**
+
+- MIC uses a zero-value-friendly opt-out, initially `DisableMTLSPoP bool`.
+  Preserve DAC's enabled default and internal propagation without another public
+  DAC option.
+- Remove superseded unreleased enable fields, updating their tests, examples,
+  and callers together. No deprecation layer is required.
+- Use a minimal internal registration hook with initialization limited to
+  recording availability. Resolve its exact internal signature during
+  implementation; no public provider framework is needed.
+- Start with Key Vault clients using the shared authentication policy and
+  validate secret reads first.
+- Keep ordinary bearer requests working with caller transports. If a bound
+  request cannot safely apply its certificate, fail explicitly without
+  downgrading or discarding caller configuration.
+- Activation is process-wide and may occur through transitive imports. Document
+  that behavior and test imported/unimported applications in separate processes.
+- Initial public names are best guesses, not implementation blockers. Schedule
+  a final naming cleanup rather than delaying behavioral work.
+
+Carry the following preparation into the relevant implementation stages:
+
+- Translate matrix rows into focused selection, fallback, and retry test cases.
+- Inventory obsolete flags and dependent tests/examples before removing them.
+
+**Exit criterion:** agreed API and selection/fallback rules, with every
+intentional C# deviation tied to a documented constraint.
+
+**Outcome:** satisfied for beginning phase 2. No automatic-path code has been
+implemented as part of this design sign-off.
+
+### 2. Add automatic token and transport handling in azcore
+
+**Status: complete; focused offline regression suites, build, and vet passed.**
+
+Update the [authentication policy](../azcore/runtime/policy_bearer_token.go),
+[mTLS transport](../azcore/runtime/policy_mtls.go), and
+[pipeline integration](../azcore/runtime/pipeline.go):
+
+- Allow automatic mode to handle either a bearer or certificate-bound token.
+- Use binding headers and a certificate-scoped transport for bound tokens.
+- Preserve ordinary authorization and normal transport behavior for bearer tokens.
+- Preserve certificate-free cold challenges, HTTPS enforcement, redirect
+  safeguards, middleware, cancellation, and retry behavior.
+- Preserve token-cache separation and certificate-scoped connection pools,
+  including certificate replacement and expiration handling.
+- Do not enable automatic PoP indiscriminately for all Azure services.
+- Define unsupported custom-transport behavior without relaxing TLS validation
+  or inventing an additional bearer-fallback condition.
+
+**Exit criterion:** offline authentication and real local-TLS tests pass for
+bearer and bound paths, with no default service behavior change yet.
+
+**Implemented:**
+
+- Every runtime pipeline can lazily select a certificate-scoped transport when
+  a credential returns a binding certificate. Installing this support does not
+  enable PoP token requests globally or create extra HTTP clients for bearer reads.
+- Authorization handlers can signal PoP support per token request without the
+  existing client enable flag. The returned token determines authorization and
+  transport: a bearer response is permitted, and a bound response is never
+  relabeled as bearer.
+- Bearer authorization clears previous binding state and the token-bound header.
+  It uses the original configured transport, preserving caller TLS settings.
+- Request modes retain separate token caches. Bound connections retain the
+  existing certificate-specific pools and certificate-expiration handling.
+- Credential failures and incompatible bound transports surface errors without
+  triggering a bearer acquisition. Existing HTTPS, trust, and redirect protections
+  remain in place.
+- The unreleased client enable flag remains temporarily as a pipeline-wide
+  preference, including its certificate-free cold-challenge path. Removing
+  superseded flags remains part of the planned API cleanup.
+
+[Offline and local-TLS regressions](../azcore/runtime/policy_mtls_test.go) cover
+service-level signaling, ordinary bearer defaults, bearer and bound responses,
+TLS configuration and middleware preservation, cancellation, cold challenges,
+opaque custom transports, and a bound-to-bearer challenge followed by a retry and
+cached read. Existing certificate replacement, concurrency, trust, redirect, and
+expiration tests continue to pass.
+
+Validation, run from the [azcore module](../azcore):
+
+| Command | Result |
+| --- | --- |
+| `go test ./runtime ./arm/runtime ./policy ./internal/exported -count=1` | Passed |
+| `go test ./runtime ./arm/runtime -run '^(TestMTLSPoP\|TestBearerPolicy_MTLSPoP)' -count=5` | Passed |
+| `go build ./...` | Passed |
+| `go vet ./runtime ./arm/runtime ./policy ./internal/exported` | Passed |
+
+No live hardware tests were run for this phase; the native attestation
+implementation was not changed. The race detector remains unavailable with the
+current `CGO_ENABLED=0` toolchain configuration.
+
+### 3. Add optional activation and credential selection
+
+**Status: ready to start; stage 1 and 2 prerequisites satisfied.**
+
+- Add the `azidentity/attestation` module and documented blank-import package.
+- Initialization only registers the integration. It must not load native
+  libraries, make network calls, or create keys.
+- Keep native attestation in MSAL; do not introduce a second implementation.
+  Add an MSAL hook only if the existing adapter cannot express the agreed design.
+- Keep dependency direction one-way: the parent identity module must not depend
+  on its optional activation module.
+- Have MIC and DAC consult registration and MSAL capabilities for eligible requests.
+- Apply the agreed opt-out shape and preserve configuration immutability.
+- Preserve the one-second DAC discovery context, disabled probe retries,
+  earlier caller deadlines, and the original acquisition context.
+- Keep the optional package importable on unsupported platforms without an
+  initialization failure.
+
+**Exit criterion:** imported and unimported applications exhibit the agreed
+selection behavior. Test them in separate processes or binaries so registration
+cannot contaminate the no-import case.
+
+### 4. Enable automatic behavior in Key Vault
+
+**Status: pending; depends on stages 2 and 3.**
+
+Update [shared Key Vault authentication](../security/keyvault/internal/challenge_policy.go):
+
+- Signal PoP support automatically for authenticated requests.
+- Preserve unauthenticated challenge behavior and challenge-resource verification.
+- Support ordinary non-managed-identity credentials without breaking existing apps.
+- Implement C#-equivalent `AADSTS3921996` classification, fresh bearer acquisition,
+  and tenant-keyed memory scoped to the policy's credential wrapper/client lifetime.
+  Preserve cancellation and mixed credential-chain failure distinctions.
+- Match C# binding-error classification for bounded outer-policy retries on the
+  specific HTTP 401 validation marker. A binding mismatch is not a reason to
+  switch to bearer.
+- Start with secret reads, then verify every Key Vault client consuming the
+  shared authentication policy.
+- Keep changes in shared or hand-maintained integration points where possible,
+  rather than manually changing generated patterns.
+
+**Exit criterion:** real Key Vault SDK clients pass offline positive, ineligible,
+tenant-denial, and non-downgrade cases without customer enable flags.
+
+### 5. Finish public APIs, examples, and smoke coverage
+
+**Status: pending; depends on stages 1 through 4.**
+
+- Finalize the minimal parity-aligned opt-out API and remove superseded unreleased
+  enable flags rather than maintaining compatibility aliases.
+- Add module documentation and examples showing the blank import with ordinary
+  credential and service-client construction.
+- Document process-wide activation, transitive imports, native prerequisites,
+  unsupported environments, and exact fallback behavior.
+- Update relevant changelogs.
+- Make the primary [smoke app](testdata/mtls-pop-smoke/README.md) scenario use the
+  blank import and default options.
+- Preserve separate no-import and opt-out validation.
+- Keep local dependency replacements out of releasable module manifests.
+
+**Exit criterion:** the documented customer flow works without attestation or
+PoP enable flags, and documentation accurately describes its limits.
+
+### 6. Run parity validation and coordinate releases
+
+**Status: pending; depends on stage 5.**
+
+Offline coverage must include:
+
+- Imported/unimported activation and opt-out behavior.
+- Eligible and ineligible hosts, credentials, and transports.
+- Discovery errors versus successful discovery of an unsupported host.
+- Attestation failure without downgrade, including native-dependency failures.
+- Exact tenant-denial fallback, isolation, and bounded retry behavior.
+- Bearer/PoP and attested/unattested cache separation.
+- Cold challenges, certificate replacement, cancellation, and DAC timeout behavior.
+- Cross-platform compilation and platform-specific behavior where executable.
+
+Repeat the on-demand live matrix:
+
+- MIC and DAC with system-assigned identity and UAMI.
+- Matching-certificate success and missing/mismatched-certificate enforcement.
+- Shared-client, multiple-client, and multiple-process concurrency.
+- Same-process identity isolation.
+- Real certificate reissuance.
+- Sequential Go -> C# -> Go coexistence.
+- Separate no-import and explicit-opt-out runs.
+
+Do not claim natural lifetime-driven renewal, underlying key rotation, or a new
+post-reboot test unless those scenarios are actually exercised.
+
+Coordinate releases in dependency order: azcore, identity and its optional
+integration, then Key Vault shared/client modules as required by their dependencies.
+
+**Exit criterion:** focused offline suites, builds, and static checks pass;
+available live scenarios pass; unsupported or unavailable scenarios are explicitly
+recorded rather than counted as passes.
+
+## Validated baseline
+
+The following predates the automatic-selection work and remains the regression
+baseline:
+
+- Explicit managed identity attestation and mTLS PoP acquisition.
+- MIC and DAC live success for system-assigned identity and UAMI.
+- DAC discovery delegated to MSAL under a one-second context deadline.
+- Direct and automatic Key Vault reads, bearer/PoP isolation, and
+  missing-certificate rejection.
+- Concurrent clients/processes and same-process identity isolation.
+- Real MSAL certificate reissuance with matching-pair success and mismatched-pair
+  rejection.
+- Recovery from the observed post-reboot VBS-key failure and fresh-process reuse.
+- Sequential Go -> C# -> Go coexistence. The C# runner reported 15 passes,
+  zero failures, and 11 skips; skips are not verified coverage.
+- Focused offline SDK/MSAL regressions, repeated smoke tests, builds, and vet.
+
+These results used local feature builds and the available Windows fixture;
+they are not qualification of published packages or a broader platform matrix.
+The Go race detector was not run because the native compiler prerequisites were
+unavailable. The nested smoke module is not discovered by ordinary SDK module
+test runs; routine coverage belongs in normal module suites.
+
+## Reference implementation
+
+Use the tested versions as the initial comparison point rather than assuming
+current upstream defaults are identical. These versioned sources define the
+parity target; changing that target requires an explicit decision:
+
+- [Azure.Core 1.63.0 managed identity selection](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Identity/ManagedIdentityClient.cs)
+- [Azure.Core 1.63.0 MSAL adapter and optional attestation discovery](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Identity/MsalManagedIdentityClient.cs)
+- [Azure.Core 1.63.0 credential option defaults](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Identity/Credentials/ManagedIdentityCredentialOptions.cs)
+- [Azure.Core 1.63.0 DAC option visibility and defaults](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Identity/Credentials/DefaultAzureCredentialOptions.cs)
+- [Azure.Core 1.63.0 DAC managed identity construction](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Identity/DefaultAzureCredentialFactory.cs)
+- [Azure.Core 1.63.0 token request defaults](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/TokenRequestContext.cs)
+- [Azure.Core 1.63.0 resource authentication and transport updates](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Pipeline/BearerTokenAuthenticationPolicy.cs)
+- [Azure.Core 1.63.0 HTTP transport update behavior](https://github.com/Azure/azure-sdk-for-net/blob/Azure.Core_1.63.0/sdk/core/Azure.Core/src/Pipeline/HttpClientTransport.cs)
+- [Test kit Key Vault request policy](https://github.com/Azure/azure-sdk-for-net/blob/f75fadb8d36d8fdf46b03d11193b8dd6009f498f/sdk/keyvault/Azure.Security.KeyVault.Shared/src/ChallengeBasedAuthenticationPolicy.cs)
+- [Test kit tenant-denial classification and fallback scope](https://github.com/Azure/azure-sdk-for-net/blob/f75fadb8d36d8fdf46b03d11193b8dd6009f498f/sdk/keyvault/Azure.Security.KeyVault.Shared/src/TenantTokenBindingCredential.cs)
+
+## Decision and implementation updates
+
+| Date | Update |
+| --- | --- |
+| 2026-11-17 | Captured the staged plan. Confirmed documented blank-import activation and the `azidentity/attestation` module name. Implementation of the automatic path has not started. |
+| 2026-11-17 | Confirmed all work is unreleased and its new public surface may be renamed or removed. Established C# as the north star with constraint-justified deviations only. Checked the behavior matrix against pinned sources; clarified KeyGuard eligibility, tenant fallback scope, binding-error retries, custom transports, and MIC/DAC option visibility. |
+| 2026-11-17 | Agreed phase 1 resolutions: MIC opt-out without another public DAC option, minimal internal registration, explicit failure for unsupported bound transports, and initial Key Vault shared-policy scope. Public names are provisional and must not block implementation. Phase 1 design decisions are complete; phase 2 is ready to start. |
+| 2026-11-17 | Completed phase 2: adaptive token authorization and lazy certificate-scoped transport selection, with bearer transport preservation and no automatic downgrade on errors. Offline runtime/ARM/policy/request suites, five focused repetitions, build, and vet passed. Service defaults, native attestation, and optional registration are unchanged; phase 3 is ready. |

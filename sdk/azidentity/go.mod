@@ -2,8 +2,6 @@ module github.com/Azure/azure-sdk-for-go/sdk/azidentity
 
 go 1.26.0
 
-replace github.com/Azure/azure-sdk-for-go/sdk/azcore => ../azcore
-
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity/cache v0.4.0

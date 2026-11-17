@@ -74,6 +74,7 @@ type TokenRequestOptions struct {
 	EnableCAE bool
 
 	// EnableMTLSPoP indicates that the caller supports certificate-bound mTLS proof-of-possession tokens.
+	// The default is false. PoP-aware service authentication policies set this automatically.
 	// Credentials may return a bearer token when this option is enabled. Callers must inspect
 	// BindingCertificate and use the matching authorization scheme and transport. A certificate-bound
 	// token must never be presented as a bearer token.

@@ -16,41 +16,26 @@ import (
 )
 
 type mtlsRequest struct {
-	requestPoP  bool
 	certificate *tls.Certificate
 }
 
 // Each certificate gets its own connection pool so rotation never reuses a connection
-// authenticated with an old certificate. Unauthenticated challenges use a separate pool
-// keyed by nil. The cache is bounded across rotations.
+// authenticated with an old certificate. The cache is bounded across rotations.
 type mtlsPolicy struct {
 	base    policy.Transporter
 	mu      sync.Mutex
 	clients map[*tls.Certificate]*http.Client
 }
 
-func (p *mtlsPolicy) prepare(req *policy.Request) (*http.Response, error) {
-	if req.Raw().URL.Scheme != "https" {
-		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires HTTPS"))
-	}
-	req.SetOperationValue(mtlsRequest{requestPoP: true})
-	return req.Next()
-}
-
 func (p *mtlsPolicy) Do(req *policy.Request) (*http.Response, error) {
 	var mtls mtlsRequest
 	req.OperationValue(&mtls)
 	if mtls.certificate == nil {
-		if !mtls.requestPoP {
-			return req.Next()
-		}
-		hasAuthorization := false
 		for header, values := range req.Raw().Header {
 			if strings.EqualFold(header, "x-ms-tokenboundauth") {
 				return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
 			}
 			if strings.EqualFold(header, "Authorization") {
-				hasAuthorization = true
 				for _, value := range values {
 					if fields := strings.Fields(value); len(fields) > 0 && strings.EqualFold(fields[0], "mtls_pop") {
 						return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires a token with a binding certificate"))
@@ -58,9 +43,7 @@ func (p *mtlsPolicy) Do(req *policy.Request) (*http.Response, error) {
 				}
 			}
 		}
-		if hasAuthorization {
-			return req.Next()
-		}
+		return req.Next()
 	}
 	if req.Raw().URL.Scheme != "https" {
 		return nil, errorinfo.NonRetriableError(errors.New("mTLS PoP requires HTTPS"))
@@ -78,7 +61,7 @@ func (p *mtlsPolicy) client(cert *tls.Certificate) (*http.Client, error) {
 	if client := p.clients[cert]; client != nil {
 		return client, nil
 	}
-	if cert != nil && (len(cert.Certificate) == 0 || cert.PrivateKey == nil) {
+	if cert == nil || len(cert.Certificate) == 0 || cert.PrivateKey == nil {
 		return nil, errors.New("mTLS PoP requires a certificate with a private key")
 	}
 	base := p.base
@@ -116,9 +99,6 @@ func (p *mtlsPolicy) client(cert *tls.Certificate) (*http.Client, error) {
 	// A shared session cache could resume a session authenticated with a different certificate.
 	config.ClientSessionCache = nil
 	config.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-		if cert == nil {
-			return &tls.Certificate{}, nil
-		}
 		return cert, nil
 	}
 	config.NextProtos = []string{"http/1.1"}

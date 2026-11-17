@@ -64,8 +64,10 @@ func TestMTLSPoPResourcePipeline(t *testing.T) {
 	tr, ok := base.Transport.(*http.Transport)
 	require.True(t, ok)
 	p := NewPipeline("test", "v1.0.0", PipelineOptions{
-		PerRetry: []policy.Policy{NewBearerTokenPolicy(cred, []string{scope}, nil)},
-	}, &policy.ClientOptions{EnableMTLSPoP: true, Transport: base})
+		PerRetry: []policy.Policy{NewBearerTokenPolicy(cred, []string{scope}, &policy.BearerTokenOptions{
+			AuthorizationHandler: policy.AuthorizationHandler{OnRequest: requestMTLSPoP},
+		})},
+	}, &policy.ClientOptions{Transport: base})
 	req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
 	require.NoError(t, err)
 	resp, err := p.Do(req)
@@ -96,13 +98,12 @@ func TestMTLSPoPResourcePipeline(t *testing.T) {
 
 func TestMTLSPoPAdaptiveAuthentication(t *testing.T) {
 	for _, tc := range []struct {
-		name                                 string
-		clientEnabled, requestEnabled, bound bool
+		name                  string
+		requestEnabled, bound bool
 	}{
 		{name: "service requests bound token", requestEnabled: true, bound: true},
 		{name: "credential returns bound token", bound: true},
 		{name: "service accepts bearer token", requestEnabled: true},
-		{name: "client accepts bearer token", clientEnabled: true},
 		{name: "ordinary bearer request"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,7 +141,7 @@ func TestMTLSPoPAdaptiveAuthentication(t *testing.T) {
 			var acquisitions, middlewareCalls int
 			auth := NewBearerTokenPolicy(mockCredential{getTokenImpl: func(_ context.Context, opts policy.TokenRequestOptions) (exported.AccessToken, error) {
 				acquisitions++
-				assert.Equal(t, tc.clientEnabled || tc.requestEnabled, opts.EnableMTLSPoP)
+				assert.Equal(t, tc.requestEnabled, opts.EnableMTLSPoP)
 				tk := exported.AccessToken{Token: tokenValue, ExpiresOn: time.Now().Add(time.Hour)}
 				if tc.bound {
 					tk.BindingCertificate = &cert
@@ -154,7 +155,7 @@ func TestMTLSPoPAdaptiveAuthentication(t *testing.T) {
 			p := NewPipeline("test", "v1.0.0", PipelineOptions{
 				PerRetry: []policy.Policy{auth},
 			}, &policy.ClientOptions{
-				EnableMTLSPoP: tc.clientEnabled, Transport: base,
+				Transport: base,
 				PerRetryPolicies: []policy.Policy{exported.PolicyFunc(func(req *policy.Request) (*http.Response, error) {
 					middlewareCalls++
 					req.Raw().Header.Set("X-Test-Middleware", "preserved")
@@ -300,12 +301,14 @@ func TestMTLSPoPTokenRenewal(t *testing.T) {
 		return exported.AccessToken{
 			Token: tokens[index], ExpiresOn: time.Now().Add(time.Hour), BindingCertificate: &certs[index],
 		}, nil
-	}}, []string{scope}, nil)
+	}}, []string{scope}, &policy.BearerTokenOptions{
+		AuthorizationHandler: policy.AuthorizationHandler{OnRequest: requestMTLSPoP},
+	})
 	p := NewPipeline("test", "v1.0.0", PipelineOptions{
 		PerRetry: []policy.Policy{auth},
 	}, &policy.ClientOptions{
-		EnableMTLSPoP: true, Transport: server.Client(),
-		Retry: policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Millisecond},
+		Transport: server.Client(),
+		Retry:     policy.RetryOptions{MaxRetries: 1, RetryDelay: time.Millisecond, MaxRetryDelay: time.Millisecond},
 	})
 	for i := range 3 {
 		if i == 1 {
@@ -333,10 +336,10 @@ func TestMTLSPoPChallengeAuthentication(t *testing.T) {
 			var cert tls.Certificate
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if requests.Add(1) == 1 {
-					assert.Equal(t, uint16(tls.VersionTLS12), r.TLS.Version)
+					assert.Equal(t, uint16(tls.VersionTLS13), r.TLS.Version)
 					assert.Empty(t, r.Header.Get("Authorization"))
 					assert.Empty(t, r.Header.Get("x-ms-tokenboundauth"))
-					assert.Empty(t, r.TLS.PeerCertificates, "the challenge must not use a caller-configured certificate")
+					assert.Len(t, r.TLS.PeerCertificates, 1, "the cold challenge must preserve the caller's TLS configuration")
 					w.Header().Set("WWW-Authenticate", `Bearer resource="https://example.com"`)
 					w.WriteHeader(http.StatusUnauthorized)
 					return
@@ -386,15 +389,15 @@ func TestMTLSPoPChallengeAuthentication(t *testing.T) {
 							if !challenged {
 								return nil
 							}
-							return authNZ(policy.TokenRequestOptions{Scopes: []string{scope}})
+							return requestMTLSPoP(nil, authNZ)
 						},
 						OnChallenge: func(_ *policy.Request, _ *http.Response, authNZ func(policy.TokenRequestOptions) error) error {
 							challenged = true
-							return authNZ(policy.TokenRequestOptions{Scopes: []string{scope}})
+							return requestMTLSPoP(nil, authNZ)
 						},
 					},
 				})},
-			}, &policy.ClientOptions{EnableMTLSPoP: true, Transport: base})
+			}, &policy.ClientOptions{Transport: base})
 			for range 2 {
 				req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
 				require.NoError(t, err)
@@ -423,7 +426,7 @@ func TestMTLSPoPRejectsAuthenticationWithoutCertificate(t *testing.T) {
 		{"x-ms-tokenboundauth": {"true"}},
 	} {
 		p := NewPipeline("test", "v1.0.0", PipelineOptions{}, &policy.ClientOptions{
-			EnableMTLSPoP: true, Transport: server.Client(),
+			Transport: server.Client(),
 		})
 		req, err := NewRequest(context.Background(), http.MethodGet, server.URL)
 		require.NoError(t, err)
@@ -447,8 +450,10 @@ func TestMTLSPoPDoesNotFallbackOnCredentialFailure(t *testing.T) {
 			srv, close := mock.NewTLSServer()
 			defer close()
 			p := NewPipeline("test", "v1.0.0", PipelineOptions{
-				PerRetry: []policy.Policy{NewBearerTokenPolicy(cred, []string{scope}, nil)},
-			}, &policy.ClientOptions{EnableMTLSPoP: true, Transport: srv})
+				PerRetry: []policy.Policy{NewBearerTokenPolicy(cred, []string{scope}, &policy.BearerTokenOptions{
+					AuthorizationHandler: policy.AuthorizationHandler{OnRequest: requestMTLSPoP},
+				})},
+			}, &policy.ClientOptions{Transport: srv})
 			req, err := NewRequest(context.Background(), http.MethodGet, srv.URL())
 			require.NoError(t, err)
 			resp, err := p.Do(req)
@@ -577,21 +582,6 @@ func TestMTLSPoPTransport(t *testing.T) {
 	assert.Nil(t, tr.TLSClientConfig.ClientSessionCache, "session resumption must not cross certificate boundaries")
 	assert.Same(t, sessionCache, baseTransport.TLSClientConfig.ClientSessionCache)
 	assert.Error(t, client.CheckRedirect(nil, nil))
-	challenge, err := p.client(nil)
-	require.NoError(t, err)
-	t.Cleanup(challenge.CloseIdleConnections)
-	assert.NotSame(t, client, challenge, "a challenge must not reuse a certificate-authenticated connection")
-	challengeTransport, ok := challenge.Transport.(*http.Transport)
-	require.True(t, ok)
-	got, err = challengeTransport.TLSClientConfig.GetClientCertificate(&tls.CertificateRequestInfo{})
-	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Empty(t, got.Certificate)
-	assert.Nil(t, got.PrivateKey)
-	assert.Nil(t, challengeTransport.TLSClientConfig.ClientSessionCache)
-	cached, err = p.client(nil)
-	require.NoError(t, err)
-	assert.Same(t, challenge, cached)
 	for range 10 {
 		copy := cert
 		rotated, err := p.client(&copy)
@@ -619,23 +609,18 @@ func TestMTLSPoPUnsupportedConfiguration(t *testing.T) {
 		{name: "TLS 1.3 only", base: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}}}, message: "TLS 1.2"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, binding := range []*tls.Certificate{nil, cert} {
-				_, err := (&mtlsPolicy{base: tc.base}).client(binding)
-				require.ErrorContains(t, err, tc.message)
-			}
+			_, err := (&mtlsPolicy{base: tc.base}).client(cert)
+			require.ErrorContains(t, err, tc.message)
 		})
 	}
-	p := NewPipeline("test", "v1.0.0", PipelineOptions{}, &policy.ClientOptions{
-		EnableMTLSPoP: true, InsecureAllowCredentialWithHTTP: true,
-	})
 	req, err := NewRequest(context.Background(), http.MethodGet, "http://example.com")
 	require.NoError(t, err)
-	_, err = p.Do(req)
-	require.ErrorContains(t, err, "HTTPS")
 	req.SetOperationValue(mtlsRequest{certificate: cert})
 	_, err = (&mtlsPolicy{}).Do(req)
 	require.ErrorContains(t, err, "HTTPS", "bound requests must require HTTPS independently of the client preference")
 	_, err = (&mtlsPolicy{}).client(&tls.Certificate{})
+	require.ErrorContains(t, err, "private key")
+	_, err = (&mtlsPolicy{}).client(nil)
 	require.ErrorContains(t, err, "private key")
 }
 
@@ -655,15 +640,13 @@ func TestMTLSPoPRedirect(t *testing.T) {
 	defer server.Close()
 	cert := server.TLS.Certificates[0]
 	p := &mtlsPolicy{base: server.Client()}
-	for _, binding := range []*tls.Certificate{nil, &cert} {
-		client, err := p.client(binding)
-		require.NoError(t, err)
-		defer client.CloseIdleConnections()
-		resp, err := client.Get(server.URL)
-		require.ErrorContains(t, err, "redirects")
-		if resp != nil {
-			require.NoError(t, resp.Body.Close())
-		}
+	client, err := p.client(&cert)
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	resp, err := client.Get(server.URL)
+	require.ErrorContains(t, err, "redirects")
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
 	}
 	assert.False(t, redirected.Load())
 }
@@ -675,14 +658,16 @@ func TestMTLSPoPRespectsServerTrust(t *testing.T) {
 	p := &mtlsPolicy{base: &http.Client{Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: x509.NewCertPool()},
 	}}}
-	for _, binding := range []*tls.Certificate{nil, &cert} {
-		client, err := p.client(binding)
-		require.NoError(t, err)
-		defer client.CloseIdleConnections()
-		_, err = client.Get(server.URL)
-		var verificationError *tls.CertificateVerificationError
-		require.ErrorAs(t, err, &verificationError)
-	}
+	client, err := p.client(&cert)
+	require.NoError(t, err)
+	defer client.CloseIdleConnections()
+	_, err = client.Get(server.URL)
+	var verificationError *tls.CertificateVerificationError
+	require.ErrorAs(t, err, &verificationError)
+}
+
+func requestMTLSPoP(_ *policy.Request, authNZ func(policy.TokenRequestOptions) error) error {
+	return authNZ(policy.TokenRequestOptions{Scopes: []string{scope}, EnableMTLSPoP: true})
 }
 
 func TestMTLSPoPCertificateExpiration(t *testing.T) {

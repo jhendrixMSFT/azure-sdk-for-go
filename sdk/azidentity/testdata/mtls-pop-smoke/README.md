@@ -109,6 +109,7 @@ From this directory in the current checkout, including the challenge
 authentication fix:
 
 ```powershell
+$env:GOWORK = "off" # Use this app's replacements, not a parent development workspace.
 go test -count=1 ./...
 go build -trimpath -o .\mtls-pop-smoke.exe .
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
@@ -216,9 +217,10 @@ DAC supports UAMI selection by client ID only. The environment value must match
 `-isolation-client-id` separately without `-dac`. `-concurrency` works with DAC.
 The blank import activates the same automatic selection for DAC's managed identity credential.
 
-The first call on a cold DAC explicitly requests PoP, exercising the managed
-identity probe and bound-token acquisition before bearer selection. Automatic
-SDK reads use a second fresh DAC to exercise cold chain selection there too.
+The first call on a cold DAC is an ordinary Key Vault SDK read. The shared policy
+requests PoP automatically, exercising the managed identity probe and bound-token
+acquisition before the explicit bearer and PoP regression checks. Both the SDK
+challenge cache and credential chain start cold; neither is pre-seeded.
 The probe is delegated to MSAL's `Capabilities` API under a one-second context
 deadline, or the caller's earlier deadline, with retries disabled. Acquisition
 then uses the original context. This is a probe/network deadline, not a
@@ -261,23 +263,23 @@ requires exposing force refresh through `azidentity`.
 Every check must pass, the process must exit zero, and the final message must be
 `PASS: all mTLS PoP smoke checks`:
 
-1. Ordinary token acquisition returns a nonempty, unexpired bearer token without
+1. A fresh `azsecrets.Client` with no PoP enable flag reads the secret twice, before
+   any direct token acquisition. A credential wrapper requires propagation of the
+   request-level PoP signal, validates every returned binding, and checks a selected
+   UAMI's client ID. The client starts cold, including its initial unauthenticated
+   challenge; the app doesn't pre-seed it or substitute a hand-built pipeline.
+2. Ordinary token acquisition returns a nonempty, unexpired bearer token without
    a binding certificate.
-2. `GetToken` with `policy.TokenRequestOptions.EnableMTLSPoP` returns a live
+3. `GetToken` with `policy.TokenRequestOptions.EnableMTLSPoP` returns a live
    binding certificate and matching private-key public component.
    The token's `cnf.x5t#S256` must equal the leaf certificate's SHA-256 thumbprint.
-3. A direct HTTPS secret GET succeeds with `Authorization: mtls_pop`,
+4. A direct HTTPS secret GET succeeds with `Authorization: mtls_pop`,
    `x-ms-tokenboundauth: true`, and the binding certificate.
-4. The **same token**, same URL, and same headers on a fresh connection with
+5. The **same token**, same URL, and same headers on a fresh connection with
    **no certificate** produce a 4xx response naming `MissingClientCertificate`.
    A timeout, TLS failure, redirect, unrelated 403, or 5xx doesn't pass.
-5. A subsequent ordinary acquisition on the same credential remains unbound,
+6. A subsequent ordinary acquisition on the same credential remains unbound,
    checking bearer/PoP cache isolation without assuming exact token reuse.
-6. A fresh `azsecrets.Client` with no PoP enable flag reads the secret twice.
-   A credential wrapper requires propagation of the PoP flag and validates every
-   token the SDK requests. The client starts cold, including its initial
-   unauthenticated Key Vault challenge; the app doesn't pre-seed that challenge
-   or silently replace it with a hand-built pipeline.
 
 The SDK now supports narrowly classified tenant-denial fallback, but this eligible-host
 smoke app deliberately requires bound tokens. A bearer result isn't a passing PoP smoke check.
@@ -315,7 +317,7 @@ leaves this transport configuration to `azcore`.
 - Missing-certificate request succeeds: token binding isn't being enforced.
 - Missing-certificate request fails for another reason: inconclusive, not a pass.
 - Automatic SDK request fails before requesting a token: the resource client's
-  challenge/pipeline integration is failing even if the direct request passed.
+  challenge/pipeline integration is failing, even if a separate direct request succeeds.
 
 Offline unit tests exercise certificate/claim validation, rejection criteria,
 TLS and headers, redirects, SDK flag checking, and local-module guards. They
@@ -329,12 +331,23 @@ against a local TLS server. It requires one certificate-free, unauthenticated
 challenge followed by two successful, certificate-authenticated secret reads,
 with the PoP flag reaching the credential and its token cached.
 
-The [mTLS transport](../../../azcore/runtime/policy_mtls.go) isolates the initial
-challenge in its own certificate-free connection pool. Authenticated requests
-still require a binding certificate; challenge requests retain HTTPS enforcement,
+The [mTLS transport](../../../azcore/runtime/policy_mtls.go) leaves unauthenticated
+challenges on the caller's original transport. With ordinary transport defaults,
+no client certificate is sent. An explicitly configured client certificate remains
+the caller's choice; no binding certificate is installed before token acquisition.
+Bound requests use separate certificate-specific connection pools with HTTPS,
 server certificate verification, redirect rejection, and transport validation.
 This covers the failure originally reproduced on HEAD `dd45fa1ed0`, where the
 initial challenge failed before the credential was called.
+
+### Separate activation and opt-out checks
+
+The smoke executable always includes the blank import and requires bound tokens.
+Keep the parent identity suite and optional integration suite as separate test binaries
+to validate absence of the import and explicit MIC opt-out without changing that primary
+scenario. The [integration test commands](../../attestation/README.md#offline-activation-checks)
+exercise these controls with fake capabilities and local HTTP endpoints. They aren't
+hardware-backed no-import or opt-out live results; those remain in the phase-6 parity matrix.
 
 ### Offline regression coverage in normal CI
 

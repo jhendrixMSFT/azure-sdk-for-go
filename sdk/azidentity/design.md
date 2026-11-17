@@ -4,7 +4,7 @@
 
 - Last updated: 2026-11-17.
 - Working branch: `mtls-pop-1`, based on the existing mTLS PoP implementation.
-- Current phase: phases 2 through 4 implemented and validated; phase 5 is next.
+- Current phase: phases 2 through 5 implemented and validated offline; phase 6 is next.
 - Automatic managed identity eligibility selection and blank-import activation
   are implemented, together with automatic Key Vault signaling, narrowly classified
   tenant fallback, and bounded binding-error retries. Native MSAL behavior is unchanged.
@@ -28,10 +28,10 @@ an optional NuGet reference:
 import _ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation"
 ```
 
-Applications would then construct ordinary `ManagedIdentityCredential` or
+Applications construct ordinary `ManagedIdentityCredential` or
 `DefaultAzureCredential` instances and PoP-aware service clients without setting
-attestation or PoP enable flags. Eligible requests would automatically use
-attested mTLS PoP. Ordinary bearer requests would remain ordinary bearer requests.
+attestation or PoP enable flags. Eligible requests automatically use
+attested mTLS PoP. Ordinary bearer requests remain ordinary bearer requests.
 
 The import makes the integration available; it does not require every credential,
 request, or service to use attestation. Native DLL and runtime deployment
@@ -47,7 +47,7 @@ prerequisites remain necessary.
 | All surface introduced by this unreleased work may be renamed or removed; no legacy enable-flag compatibility layer is required. | Confirmed |
 | Target the automatic C# experience rather than requiring customers to set multiple enable flags. | Agreed |
 | Do not introduce a new customer-facing strict-mode option for this work. | Agreed |
-| Use a zero-value-friendly MIC opt-out, initially named `DisableMTLSPoP bool`; do not add another public DAC option. Remove superseded unreleased enable flags. | Agreed |
+| Use the zero-value-friendly MIC opt-out `DisableMTLSPoP bool`; do not add another public DAC option. Remove superseded unreleased enable flags. | Implemented; names retained in phase 5 |
 | Use a minimal internal registration hook that records availability only; keep native work lazy and in MSAL. Do not add a public registration/provider framework. | Agreed |
 | Preserve ordinary bearer requests and caller transport configuration. Return an explicit error if a bound request cannot safely apply its certificate; never silently downgrade or discard caller configuration. | Agreed |
 | Initially enable automatic behavior for Key Vault clients using the shared authentication policy, with secret reads as the first live validation target. Other services remain unchanged. | Agreed |
@@ -61,10 +61,10 @@ as well, which must be documented.
 
 ## C#-aligned behavior contract
 
-This table describes the target automatic SDK path, checked against the
-[pinned C# sources](#reference-implementation). It is not a description of
-the current Go implementation. The constraint-driven adaptations below are
-agreed; initial Go API names remain provisional for a final cleanup pass.
+This table describes the agreed automatic SDK contract, checked against the
+[pinned C# sources](#reference-implementation) and implemented through phase 5.
+Offline validation doesn't replace the outstanding hardware-backed parity matrix.
+The constraint-driven adaptations below are agreed; phase 5 retains the selected API names.
 
 | Condition | Intended outcome |
 | --- | --- |
@@ -118,8 +118,8 @@ token's authorization scheme.
 | Constraint | Adaptation | Status |
 | --- | --- | --- |
 | A Go module requirement does not initialize its packages; Go has no equivalent of the C# optional assembly lookup. | Documented blank import with process-wide registration. | Agreed |
-| Go options must preserve equivalent behavior for nil and zero-valued options; a plain enable bool cannot distinguish unset from explicitly false. | Use a MIC `DisableMTLSPoP bool` opt-out: the zero value permits automatic PoP when eligible. The initial name is provisional. | Agreed |
-| Go and C# expose different transport extension mechanisms. | Preserve caller transport configuration and ordinary bearer behavior. Return an explicit error when a bound request cannot safely apply its certificate; do not silently downgrade. Resolve transport mechanics in phase 2. | Agreed |
+| Go options must preserve equivalent behavior for nil and zero-valued options; a plain enable bool cannot distinguish unset from explicitly false. | Use a MIC `DisableMTLSPoP bool` opt-out: the zero value permits automatic PoP when eligible. | Implemented |
+| Go and C# expose different transport extension mechanisms. | Preserve caller transport configuration for bearer and unauthenticated requests. Return an explicit error when a bound request cannot safely apply its certificate; do not silently downgrade. | Implemented in phases 2 and 5 |
 
 Record any additional deviation here with its concrete constraint, C# reference
 behavior, Go adaptation, behavioral impact, and approval status before adopting it.
@@ -131,7 +131,7 @@ and avoid enabling new service defaults before the underlying paths are ready.
 
 ### 1. Finalize semantics and API shape
 
-**Status: design decisions complete; implementation preparation remains.**
+**Status: complete; implementation preparation was handled in phases 2 through 5.**
 
 - MIC uses a zero-value-friendly opt-out, initially `DisableMTLSPoP bool`.
   Preserve DAC's enabled default and internal propagation without another public
@@ -200,9 +200,9 @@ bearer and bound paths, with no default service behavior change yet.
 - Credential failures and incompatible bound transports surface errors without
   triggering a bearer acquisition. Existing HTTPS, trust, and redirect protections
   remain in place.
-- The unreleased client enable flag remains temporarily as a pipeline-wide
-  preference, including its certificate-free cold-challenge path. Removing
-  superseded flags remains part of the planned API cleanup.
+- At the phase-2 boundary, the unreleased client enable flag remained as a
+  pipeline-wide preference with a certificate-free cold-challenge path. Phase 5
+  removes that preference and leaves unauthenticated requests on the caller's transport.
 
 [Offline and local-TLS regressions](../azcore/runtime/policy_mtls_test.go) cover
 service-level signaling, ordinary bearer defaults, bearer and bound responses,
@@ -383,12 +383,12 @@ cache module, which requires unavailable cgo accessors. Restricting cross-builds
 the affected local module directories passed.
 
 No phase-4 hardware-backed live tests or race-detector runs were performed.
-Version floors, coordinated publication, final API/docs cleanup, and the live parity
-matrix remain phases 5 and 6.
+At the phase-4 boundary, final API/docs cleanup remained phase 5; version floors,
+coordinated publication, and the live parity matrix remain phase 6.
 
 ### 5. Finish public APIs, examples, and smoke coverage
 
-**Status: pending; depends on stages 1 through 4.**
+**Status: complete; offline validation passed.**
 
 - Finalize the minimal parity-aligned opt-out API and remove superseded unreleased
   enable flags rather than maintaining compatibility aliases.
@@ -404,6 +404,80 @@ matrix remain phases 5 and 6.
 
 **Exit criterion:** the documented customer flow works without attestation or
 PoP enable flags, and documentation accurately describes its limits.
+
+#### Public surface and customer flow
+
+| Surface | Phase-5 decision |
+| --- | --- |
+| `azidentity/attestation` blank import | Sole activation mechanism; process-wide and transitive, with no native work during initialization. |
+| `ManagedIdentityCredentialOptions.DisableMTLSPoP` | Retained as the zero-value-friendly MIC opt-out. No additional public DAC switch. |
+| `ClientOptions.EnableMTLSPoP` | Removed, without an alias. Service authentication policies own request selection. |
+| MIC/DAC `EnableAttestation` | Remains removed by phase 3. |
+| `TokenRequestOptions.EnableMTLSPoP` | Retained for direct callers and PoP-aware service authors; false by default. Not a customer option required for ordinary Key Vault calls. |
+| `AccessToken.BindingCertificate` | Retained as the actual bearer/bound result discriminator. |
+| Registration and response/error bridges | Remain SDK-internal; no customer provider or strict-mode API. |
+
+The [compiled examples](attestation/example_test.go) demonstrate the blank import
+with `NewDefaultAzureCredential(nil)` and `azsecrets.NewClient(..., nil)`, and
+the MIC opt-out. README and package documentation cover lazy process-wide activation,
+transitive imports, prerequisites, known unsupported hosts, and the exact tenant-denial
+exception. Only the optional integration's tests/examples gain a Key Vault test
+dependency; production activation remains a small registration hook.
+
+Removing the old client flag also removes its eager preparation policy and
+certificate-free transport pool. Bearer and unauthenticated requests now always use
+the original transport, including an explicitly configured caller certificate.
+With ordinary defaults, the cold challenge remains certificate-free. Bound requests
+still require HTTPS, use certificate-specific pools, and reject incompatible transports
+or redirects without reacquiring bearer tokens. Orphan bound authorization headers
+are rejected even without any enable flag.
+
+The [smoke app](testdata/mtls-pop-smoke/README.md) now starts with two real SDK reads
+on a fresh client and credential, before direct token calls. This also makes DAC's
+first selection follow the automatic service path. Its wrapper validates bindings
+and selected UAMI client IDs. Explicit direct-token calls remain separate regression
+checks. The smoke executable deliberately requires bound tokens; separate SDK test
+binaries preserve unimported activation and MIC opt-out controls without converting
+legitimate bearer outcomes into positive PoP smoke results.
+
+#### Validation and source-only development
+
+| Scope and command | Result |
+| --- | --- |
+| Core: `go test ./runtime ./arm/runtime -run '^(TestMTLSPoP\|TestBearerPolicy_MTLSPoP)' -count=1` | Passed after removal of the client flag |
+| Core: `go test ./runtime ./arm/runtime ./policy -count=1` | Passed |
+| Parent identity: `go test . -run '^(TestManagedIdentityCredential_Attestation\|TestDefaultAzureCredential_Attestation)$' -count=3` | Passed in the unimported binary |
+| Optional integration: `go test ./... -count=3` and `go vet ./...` | Passed, including compiled examples, SDK-driven MIC/DAC discovery, and explicit MIC opt-out |
+| Key Vault shared module: `go test ./... -count=1` | Passed |
+| All Key Vault modules: `go test @kv -run '^(TestClientMTLSPoP\|TestClientSignalsMTLSPoP\|TestClientsSignalMTLSPoP\|TestDisableChallengeResourceVerification)$' -count=1` | Passed for all seven shared-policy consumers |
+| Each affected local module: `go build ./...` and `go vet ./...` | Passed |
+| Smoke module, `GOWORK=off`: `go test ./... -count=1` and `go build -trimpath -o <temporary-executable> .` | Passed; existing executable preserved |
+| Each affected local module: `go build ./...` for Linux amd64 and Darwin arm64 | Passed; compilation only |
+| Optional integration: `go test -c` for both cross targets | Tests and examples compiled; not executed |
+
+`@kv` denotes the same four module patterns as phase 4. Builds and vet used the nine
+affected local module directories rather than broad import patterns that select the
+unrelated optional cache module. Parent and public-client unit runs used
+`AZURE_RECORD_MODE=live` only to avoid the recording proxy; they didn't contact Azure.
+
+The identity module's existing local core replacement was removed. Releasable manifests
+now contain no local replacements; the standalone smoke app retains its application
+replacements. The unpublished parent identity version prevents ordinary isolated
+`go mod tidy` in the optional module. Dependency tidying therefore used a temporary
+modfile with local replacements, stripped before writing the generated manifest back.
+Published Key Vault test dependency checksums were recorded separately.
+
+Source validation still requires matching local modules in a workspace or application
+replacements until phase 6 coordinates published dependency versions. The current VS Code
+language-server configuration still selects published core for identity and excludes the
+nested optional module, so its diagnostics aren't clean despite the successful workspace
+builds and vet. Configure the editor with the same local workspace before using its
+diagnostics as a validation signal; the [source-only setup](attestation/README.md#source-only-development)
+documents the commands. No editor settings or ignore rules were changed.
+
+No phase-5 hardware-backed live tests or race-detector runs were performed.
+Phase 6 retains dependency/version coordination, the live activation/opt-out controls,
+and the full on-demand hardware parity matrix.
 
 ### 6. Run parity validation and coordinate releases
 
@@ -491,3 +565,4 @@ parity target; changing that target requires an explicit decision:
 | 2026-11-17 | Completed phase 2: adaptive token authorization and lazy certificate-scoped transport selection, with bearer transport preservation and no automatic downgrade on errors. Offline runtime/ARM/policy/request suites, five focused repetitions, build, and vet passed. Service defaults, native attestation, and optional registration are unchanged; phase 3 is ready. |
 | 2026-11-17 | Completed phase 3: optional blank-import registration, lazy availability lookup, automatic KeyGuard eligibility, MIC opt-out, and DAC bounded-probe reuse. Imported/unimported offline tests and portability checks passed. |
 | 2026-11-17 | Approved and implemented phase 4 internal bridges. Automatic Key Vault request signaling, structured tenant-denial fallback, and bounded binding-validation retries passed focused and repeated offline tests across all seven consumers, real local TLS, builds, vet, and scoped cross-compilation. Hardware parity and release coordination remain pending. |
+| 2026-11-17 | Completed phase 5: retained the MIC opt-out and direct-request signal, removed the unreleased client enable flag and eager transport preparation, added compiled blank-import/default-client examples and imported SDK selection tests, moved automatic SDK smoke checks first, and removed the identity manifest's local replacement. Separate imported/unimported controls, core and consumer regressions, builds, vet, and Linux/macOS compilation passed. Editor workspace selection and source-only dependency constraints are documented; hardware parity and publication remain phase 6. |

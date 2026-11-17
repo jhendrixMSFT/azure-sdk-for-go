@@ -73,6 +73,8 @@ var shouldRefresh = func(tk exported.AccessToken, _ acquiringResourceState) bool
 // cred: an azcore.TokenCredential implementation such as a credential object from azidentity
 // scopes: the list of permission scopes required for the token.
 // opts: optional settings. Pass nil to accept default values; this is the same as passing a zero-value options.
+// PoP-aware services signal support with TokenRequestOptions.EnableMTLSPoP in their AuthorizationHandler.
+// Authorization and transport selection follow the returned token's BindingCertificate, not the request flag.
 func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *policy.BearerTokenOptions) *BearerTokenPolicy {
 	if opts == nil {
 		opts = &policy.BearerTokenOptions{}
@@ -106,9 +108,6 @@ func NewBearerTokenPolicy(cred exported.TokenCredential, scopes []string, opts *
 func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(policy.TokenRequestOptions) error {
 	return func(tro policy.TokenRequestOptions) error {
 		tro.EnableCAE = true
-		var mtls mtlsRequest
-		req.OperationValue(&mtls)
-		tro.EnableMTLSPoP = tro.EnableMTLSPoP || mtls.requestPoP
 		as := acquiringResourceState{p: b, req: req, tro: tro}
 		resource := b.mainResource
 		if tro.EnableMTLSPoP {
@@ -120,8 +119,7 @@ func (b *BearerTokenPolicy) authenticateAndAuthorize(req *policy.Request) func(p
 			// retrying authentication, the credential would have done so already
 			return errorinfo.NonRetriableError(err)
 		}
-		mtls.certificate = tk.BindingCertificate
-		req.SetOperationValue(mtls)
+		req.SetOperationValue(mtlsRequest{certificate: tk.BindingCertificate})
 		if tk.BindingCertificate != nil {
 			req.Raw().Header.Set(shared.HeaderAuthorization, "mtls_pop "+tk.Token)
 			req.Raw().Header.Set("x-ms-tokenboundauth", "true")

@@ -102,8 +102,6 @@ func newManagedIdentityClient(options *ManagedIdentityCredentialOptions) (*manag
 		options = &ManagedIdentityCredentialOptions{}
 	}
 	cp := options.ClientOptions
-	// This option applies to resource requests, not the credential's acquisition pipeline.
-	cp.EnableMTLSPoP = false
 	c := managedIdentityClient{
 		attestationAvailable: attestation.Registered,
 		disableMTLSPoP:       options.DisableMTLSPoP,

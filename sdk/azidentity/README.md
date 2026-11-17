@@ -88,9 +88,14 @@ with Credential Guard enabled and IMDSv2 available. Activate the optional
 import (
   "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
   _ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation"
+  "github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
 cred, err := azidentity.NewDefaultAzureCredential(nil)
+if err != nil {
+  // handle error
+}
+client, err := azsecrets.NewClient("https://<vault-name>.vault.azure.net/", cred, nil)
 if err != nil {
   // handle error
 }
@@ -103,14 +108,15 @@ and is performed lazily when required for issuance.
 
 The target resource must support certificate-bound tokens. Updated Key Vault shared
 authentication automatically signals PoP support, so ordinary Key Vault client construction
-doesn't need an enable flag. Other resource clients can signal support with
-`EnableMTLSPoP: true` in their embedded `azcore.ClientOptions`. The option isn't needed on the
-credential's client options. Ordinary bearer requests remain unchanged. Without the import,
+doesn't need an enable flag. Other services aren't automatically opted in; their authentication
+policies must explicitly signal support per token request. There is no client-level PoP enable
+flag. Ordinary bearer requests remain unchanged. Without the import,
 or when successful capability discovery reports an unsupported host, managed identity uses
 ordinary bearer acquisition. Discovery errors aren't treated as known lack of support.
 Set `ManagedIdentityCredentialOptions.DisableMTLSPoP: true` to opt a managed identity credential
 out of bound-token acquisition. There is no additional attestation option on
 `DefaultAzureCredential`. Other credentials in its chain retain their existing behavior.
+See the [compiled examples](attestation/example_test.go) for default construction and MIC opt-out.
 
 On eligible Windows hosts, deploy `AttestationClientLib.dll` from the
 `Microsoft.Azure.Security.KeyGuardAttestation` package (`runtimes/win-x64/native`) alongside the

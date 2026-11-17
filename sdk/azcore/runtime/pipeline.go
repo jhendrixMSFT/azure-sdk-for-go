@@ -71,9 +71,6 @@ func NewPipeline(module, version string, plOpts PipelineOptions, options *policy
 	// is populated with the final response (some policies might mutate the response)
 	policies := []policy.Policy{exported.PolicyFunc(includeResponsePolicy)}
 	mtls := &mtlsPolicy{base: cp.Transport}
-	if cp.EnableMTLSPoP {
-		policies = append(policies, exported.PolicyFunc(mtls.prepare))
-	}
 	if cp.APIVersion != "" {
 		policies = append(policies, newAPIVersionPolicy(cp.APIVersion, &plOpts.APIVersion))
 	}

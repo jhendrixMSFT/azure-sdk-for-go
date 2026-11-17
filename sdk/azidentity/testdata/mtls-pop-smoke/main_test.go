@@ -340,6 +340,21 @@ func TestCheckedCredential(t *testing.T) {
 	_, err = credential.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), credential.calls.Load())
+	payload, err := tokenPayload(token.Token)
+	require.NoError(t, err)
+	var claims map[string]any
+	require.NoError(t, json.Unmarshal(payload, &claims))
+	claims["appid"], claims["oid"], claims["tid"] = "client", "object", "tenant"
+	payload, err = json.Marshal(claims)
+	require.NoError(t, err)
+	token.Token = "e30." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
+	credential.clientID = "CLIENT"
+	_, err = credential.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
+	require.NoError(t, err)
+	credential.clientID = "other"
+	_, err = credential.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
+	require.ErrorContains(t, err, "different managed identity client ID")
+	credential.clientID = ""
 	credential.credential = tokenCredentialFunc(func(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
 		return azcore.AccessToken{Token: "unbound", ExpiresOn: time.Now().Add(time.Hour)}, nil
 	})
@@ -373,8 +388,14 @@ func TestAutomaticPipeline(t *testing.T) {
 		return token, nil
 	})}
 	pipeline := runtime.NewPipeline("mtls-pop-smoke", "v0.0.0", runtime.PipelineOptions{
-		PerRetry: []policy.Policy{runtime.NewBearerTokenPolicy(credential, []string{vaultScope}, nil)},
-	}, &policy.ClientOptions{EnableMTLSPoP: true, Transport: server.Client()})
+		PerRetry: []policy.Policy{runtime.NewBearerTokenPolicy(credential, []string{vaultScope}, &policy.BearerTokenOptions{
+			AuthorizationHandler: policy.AuthorizationHandler{
+				OnRequest: func(_ *policy.Request, authNZ func(policy.TokenRequestOptions) error) error {
+					return authNZ(policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
+				},
+			},
+		})},
+	}, &policy.ClientOptions{Transport: server.Client()})
 	for range 2 {
 		req, err := runtime.NewRequest(context.Background(), http.MethodGet, server.URL)
 		require.NoError(t, err)
@@ -518,7 +539,7 @@ func TestSDKConcurrency(t *testing.T) {
 	defer cancel()
 	require.NoError(t, verifySDKConcurrency(ctx, cfg, credential, options))
 	assert.Equal(t, int32(10), reads.Load(), "two baselines and two four-way concurrent waves")
-	assert.False(t, options.EnableMTLSPoP, "the caller's options must not be modified")
+	assert.Zero(t, options.Retry.MaxRetries, "the caller's retry options must not be modified")
 	reads.Store(0)
 	fail.Store(true)
 	err := verifySDKConcurrency(ctx, cfg, credential, options)

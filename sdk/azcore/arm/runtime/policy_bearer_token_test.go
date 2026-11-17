@@ -38,17 +38,15 @@ func TestBearerPolicy_MTLSPoPAuxiliaryTenants(t *testing.T) {
 
 func TestBearerPolicy_MTLSPoP(t *testing.T) {
 	cred := mockCredential{getTokenImpl: func(_ context.Context, opts azpolicy.TokenRequestOptions) (azcore.AccessToken, error) {
-		require.True(t, opts.EnableMTLSPoP)
+		require.False(t, opts.EnableMTLSPoP, "ARM doesn't automatically request PoP")
 		return azcore.AccessToken{Token: tokenValue, ExpiresOn: time.Now().Add(time.Hour), BindingCertificate: &tls.Certificate{}}, nil
 	}}
-	p, err := NewPipeline("test", "v1.0.0", cred, runtime.PipelineOptions{}, &armpolicy.ClientOptions{
-		ClientOptions: azpolicy.ClientOptions{EnableMTLSPoP: true},
-	})
+	p, err := NewPipeline("test", "v1.0.0", cred, runtime.PipelineOptions{}, nil)
 	require.NoError(t, err)
 	req, err := runtime.NewRequest(context.Background(), http.MethodGet, "https://example.com")
 	require.NoError(t, err)
 	_, err = p.Do(req)
-	// Reaching transport validation proves the ARM policy requested and authorized a bound token.
+	// A returned bound token must be honored even when it wasn't requested.
 	require.ErrorContains(t, err, "private key")
 }
 

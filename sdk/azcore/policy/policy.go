@@ -36,15 +36,6 @@ type ClientOptions struct {
 	// Cloud specifies a cloud for the client. The default is Azure Public Cloud.
 	Cloud cloud.Configuration
 
-	// EnableMTLSPoP signals support for certificate-bound tokens to authentication policies.
-	// Credentials may return bearer tokens, which use Transport unchanged. Certificate-bound
-	// tokens authenticate resource connections with their binding certificates, requiring
-	// TLS 1.2 with client renegotiation. Transport must be nil or an *http.Client
-	// with a nil Transport or a standard *http.Transport without custom TLS dialing.
-	// Bound requests reject redirects and unsupported configurations rather than falling back to bearer tokens.
-	// Initial unauthenticated challenge requests are sent without a client certificate.
-	EnableMTLSPoP bool
-
 	// InsecureAllowCredentialWithHTTP enables authenticated requests over HTTP.
 	// By default, authenticated requests to an HTTP endpoint are rejected by the client.
 	// WARNING: setting this to true will allow sending the credential in clear text. Use with caution.
@@ -64,6 +55,10 @@ type ClientOptions struct {
 	TracingProvider tracing.Provider
 
 	// Transport sets the transport for HTTP requests.
+	// Bearer and unauthenticated requests use it unchanged. Certificate-bound requests require
+	// nil or an *http.Client with a nil Transport or a standard *http.Transport without custom
+	// TLS dialing. They use a derived transport with TLS 1.2 and client renegotiation, reject
+	// redirects, and fail explicitly for unsupported configurations rather than acquiring bearer tokens.
 	Transport Transporter
 
 	// PerCallPolicies contains custom policies to inject into the pipeline.

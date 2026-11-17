@@ -8,11 +8,14 @@
 - Authentication policies automatically select bearer or mTLS PoP authorization from the returned token.
   Bound requests use certificate-specific connection pools and fail explicitly when the transport can't
   support binding; bearer requests retain the configured transport.
-- Added `ClientOptions.EnableMTLSPoP` to signal PoP support. Authorization handlers can also signal support
-  per token request without setting this option. Credentials may return bearer tokens; acquisition or
-  bound-transport failures don't trigger an automatic bearer fallback.
+- PoP-aware service authorization handlers signal support per token request. Credentials may return
+  bearer tokens; acquisition or bound-transport failures don't trigger an automatic bearer fallback.
 
 ### Breaking Changes
+
+- Removed the unreleased `ClientOptions.EnableMTLSPoP` switch. PoP-aware services use
+  `TokenRequestOptions.EnableMTLSPoP`; clients adapt automatically to returned binding certificates.
+  Unauthenticated requests retain the caller's transport rather than using a separate PoP pool.
 
 ### Bugs Fixed
 

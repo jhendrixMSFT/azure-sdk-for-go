@@ -88,24 +88,10 @@ func run(ctx context.Context, cfg configuration) error {
 	if err != nil {
 		return fmt.Errorf("creating credential: %w", err)
 	}
-	if cfg.dac {
-		// Exercise discovery on a cold DAC with PoP as its first request, not after bearer selection.
-		token, err := credential.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
-		if err != nil {
-			return fmt.Errorf("cold DefaultAzureCredential mTLS PoP acquisition: %w", err)
-		}
-		if _, err := validateBound(token, time.Now()); err != nil {
-			return err
-		}
-		identity, err := readTokenIdentity(token.Token)
-		if err != nil {
-			return err
-		}
-		if cfg.clientID != "" && !strings.EqualFold(identity.clientID, cfg.clientID) {
-			return errors.New("DefaultAzureCredential token doesn't match the requested UAMI")
-		}
-		fmt.Println("PASS: cold DefaultAzureCredential acquires a bound managed-identity token")
+	if err := verifySDK(ctx, cfg, credential); err != nil {
+		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
 	}
+	fmt.Println("PASS: cold Key Vault SDK reads secret twice with automatic mTLS PoP signaling")
 	bearer, err := credential.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}})
 	if err != nil {
 		return fmt.Errorf("initial bearer acquisition: %w", err)
@@ -141,20 +127,6 @@ func run(ctx context.Context, cfg configuration) error {
 	}
 	fmt.Println("PASS: bearer acquisition remains unbound after mTLS PoP acquisition")
 
-	sdkCredential := credential
-	if cfg.dac {
-		sdkCredential, err = newSmokeCredential(cfg)
-		if err != nil {
-			return err
-		}
-	}
-	if err := verifySDK(ctx, cfg, sdkCredential); err != nil {
-		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
-	}
-	fmt.Println("PASS: Key Vault SDK reads secret twice with automatic mTLS PoP signaling")
-	if cfg.dac {
-		fmt.Println("PASS: fresh DefaultAzureCredential completes automatic SDK mTLS PoP reads")
-	}
 	if cfg.concurrency > 0 {
 		if err := verifySDKConcurrency(ctx, cfg, credential, nil); err != nil {
 			return fmt.Errorf("concurrent SDK mTLS PoP: %w", err)
@@ -466,6 +438,7 @@ type checkedCredential struct {
 	credential azcore.TokenCredential
 	calls      atomic.Int32
 	identity   *tokenIdentity
+	clientID   string
 }
 
 func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
@@ -479,13 +452,16 @@ func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRe
 	if _, err := validateBound(token, time.Now()); err != nil {
 		return azcore.AccessToken{}, err
 	}
-	if c.identity != nil {
+	if c.identity != nil || c.clientID != "" {
 		got, err := readTokenIdentity(token.Token)
 		if err != nil {
 			return azcore.AccessToken{}, err
 		}
-		if got != *c.identity {
+		if c.identity != nil && got != *c.identity {
 			return azcore.AccessToken{}, errors.New("credential returned a token for a different identity")
+		}
+		if c.clientID != "" && !strings.EqualFold(got.clientID, c.clientID) {
+			return azcore.AccessToken{}, errors.New("credential returned a token for a different managed identity client ID")
 		}
 	}
 	c.calls.Add(1)
@@ -493,7 +469,7 @@ func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRe
 }
 
 func verifySDK(ctx context.Context, cfg configuration, credential azcore.TokenCredential) error {
-	checked := &checkedCredential{credential: credential}
+	checked := &checkedCredential{credential: credential, clientID: cfg.clientID}
 	client, err := newSecretClient(cfg, checked, nil)
 	if err != nil {
 		return err

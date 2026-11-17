@@ -1589,6 +1589,14 @@ type fakeManagedIdentityClient struct {
 	// set ar to have all API calls return the provided AuthResult
 	ar           public.AuthResult
 	acquireToken func(context.Context, string, ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error)
+	capabilities func(context.Context) (managedidentity.Capabilities, error)
+}
+
+func (f fakeManagedIdentityClient) Capabilities(ctx context.Context) (managedidentity.Capabilities, error) {
+	if f.capabilities != nil {
+		return f.capabilities(ctx)
+	}
+	return managedidentity.Capabilities{}, nil
 }
 
 func (f fakeManagedIdentityClient) AcquireToken(ctx context.Context, resource string, opts ...managedidentity.AcquireTokenOption) (managedidentity.AuthResult, error) {

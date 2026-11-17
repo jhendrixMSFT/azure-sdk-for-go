@@ -40,6 +40,7 @@ type configuration struct {
 	attestation                    bool
 	concurrency                    int
 	isolationClientID              string
+	dac                            bool
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 	flag.StringVar(&cfg.objectID, "object-id", "", "User-assigned identity object ID (mutually exclusive with other identity flags)")
 	flag.StringVar(&cfg.resourceID, "resource-id", "", "User-assigned identity resource ID (mutually exclusive with other identity flags)")
 	flag.BoolVar(&cfg.attestation, "attestation", false, "Request KeyGuard key attestation (requires AttestationClientLib.dll and the x64 Visual C++ runtime)")
+	flag.BoolVar(&cfg.dac, "dac", false, "Use DefaultAzureCredential; requires AZURE_TOKEN_CREDENTIALS=prod and matching AZURE_CLIENT_ID for UAMI")
 	flag.IntVar(&cfg.concurrency, "concurrency", 0, "Opt in to shared/multiple-client concurrent reads with 2-8 workers; zero disables")
 	flag.StringVar(&cfg.isolationClientID, "isolation-client-id", "", "Opt in to alternating system-assigned and this UAMI client ID; both must read the secret")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "Overall test timeout")
@@ -83,11 +85,27 @@ func run(ctx context.Context, cfg configuration) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
-	credential, err := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-		ID: cfg.identity(), EnableAttestation: cfg.attestation,
-	})
+	credential, err := newSmokeCredential(cfg)
 	if err != nil {
-		return fmt.Errorf("creating ManagedIdentityCredential: %w", err)
+		return fmt.Errorf("creating credential: %w", err)
+	}
+	if cfg.dac {
+		// Exercise discovery on a cold DAC with PoP as its first request, not after bearer selection.
+		token, err := credential.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: true})
+		if err != nil {
+			return fmt.Errorf("cold DefaultAzureCredential mTLS PoP acquisition: %w", err)
+		}
+		if _, err := validateBound(token, time.Now()); err != nil {
+			return err
+		}
+		identity, err := readTokenIdentity(token.Token)
+		if err != nil {
+			return err
+		}
+		if cfg.clientID != "" && !strings.EqualFold(identity.clientID, cfg.clientID) {
+			return errors.New("DefaultAzureCredential token doesn't match the requested UAMI")
+		}
+		fmt.Println("PASS: cold DefaultAzureCredential acquires a bound managed-identity token")
 	}
 	bearer, err := credential.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}})
 	if err != nil {
@@ -124,10 +142,20 @@ func run(ctx context.Context, cfg configuration) error {
 	}
 	fmt.Println("PASS: bearer acquisition remains unbound after mTLS PoP acquisition")
 
-	if err := verifySDK(ctx, cfg, credential); err != nil {
+	sdkCredential := credential
+	if cfg.dac {
+		sdkCredential, err = newSmokeCredential(cfg)
+		if err != nil {
+			return err
+		}
+	}
+	if err := verifySDK(ctx, cfg, sdkCredential); err != nil {
 		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
 	}
 	fmt.Println("PASS: Key Vault SDK reads secret twice with ClientOptions.EnableMTLSPoP")
+	if cfg.dac {
+		fmt.Println("PASS: fresh DefaultAzureCredential completes automatic SDK mTLS PoP reads")
+	}
 	if cfg.concurrency > 0 {
 		if err := verifySDKConcurrency(ctx, cfg, credential, nil); err != nil {
 			return fmt.Errorf("concurrent SDK mTLS PoP: %w", err)
@@ -173,6 +201,43 @@ func (c configuration) validate() error {
 	}
 	if c.concurrency != 0 && (c.concurrency < 2 || c.concurrency > 8) {
 		return errors.New("concurrency must be zero (disabled) or between 2 and 8")
+	}
+	if c.dac && (c.objectID != "" || c.resourceID != "" || c.isolationClientID != "") {
+		return errors.New("dac supports only client-id selection; run identity isolation separately without dac")
+	}
+	return nil
+}
+
+func newSmokeCredential(cfg configuration) (azcore.TokenCredential, error) {
+	if !cfg.dac {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: cfg.identity(), EnableAttestation: cfg.attestation,
+		})
+	}
+	if err := validateDACEnvironment(cfg); err != nil {
+		return nil, err
+	}
+	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{EnableAttestation: cfg.attestation})
+}
+
+func validateDACEnvironment(cfg configuration) error {
+	if os.Getenv("AZURE_TOKEN_CREDENTIALS") != "prod" {
+		return errors.New("dac requires AZURE_TOKEN_CREDENTIALS=prod to exercise probing without developer-credential fallback")
+	}
+	for _, name := range []string{
+		"AZURE_TENANT_ID", "AZURE_CLIENT_SECRET", "AZURE_CLIENT_CERTIFICATE_PATH",
+		"AZURE_USERNAME", "AZURE_PASSWORD", "AZURE_FEDERATED_TOKEN_FILE",
+	} {
+		if os.Getenv(name) != "" {
+			return fmt.Errorf("%s is set; dac smoke requires EnvironmentCredential and WorkloadIdentityCredential to be unconfigured", name)
+		}
+	}
+	id, set := os.LookupEnv("AZURE_CLIENT_ID")
+	if cfg.clientID == "" && set {
+		return errors.New("unset AZURE_CLIENT_ID for system-assigned dac smoke")
+	}
+	if cfg.clientID != "" && (!set || !strings.EqualFold(id, cfg.clientID)) {
+		return errors.New("AZURE_CLIENT_ID must match client-id for UAMI dac smoke")
 	}
 	return nil
 }

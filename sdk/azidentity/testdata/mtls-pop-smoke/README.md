@@ -183,6 +183,53 @@ failure propagation, and alternating SDK reads with deliberately crossed
 identity tokens. Like the rest of this app, they require an explicit test run
 in this nested module, not ordinary SDK CI discovery.
 
+### DefaultAzureCredential (DAC)
+
+Add `-dac` to run the same smoke checks through `DefaultAzureCredential` instead
+of directly constructing `ManagedIdentityCredential`. For this test, set
+`AZURE_TOKEN_CREDENTIALS=prod`: it retains the production credential chain and
+its IMDS probe, while excluding developer-credential fallback. Selecting only
+`ManagedIdentityCredential` disables the probe and is rejected by this mode.
+
+Run in a clean shell without environment/workload credentials. The app rejects
+`AZURE_TENANT_ID`, client secrets/certificate paths, username/password, and
+federated token files so another credential cannot satisfy the test. It doesn't
+change the environment itself.
+
+```powershell
+$env:AZURE_TOKEN_CREDENTIALS = "prod"
+# AZURE_CLIENT_ID must be unset (not merely empty) for system-assigned identity.
+.\mtls-pop-smoke.exe -dac -attestation `
+    -vault-url "https://<vault-name>.vault.azure.net" `
+    -secret-name "<existing-test-secret>"
+
+$env:AZURE_CLIENT_ID = "<user-assigned-client-id-guid>"
+.\mtls-pop-smoke.exe -dac -attestation `
+    -client-id $env:AZURE_CLIENT_ID `
+    -vault-url "https://<vault-name>.vault.azure.net" `
+    -secret-name "<existing-test-secret>"
+```
+
+DAC supports UAMI selection by client ID only. The environment value must match
+`-client-id`; the app also checks the returned token's identity. Run
+`-isolation-client-id` separately without `-dac`. `-concurrency` works with DAC.
+`-attestation` maps to `DefaultAzureCredentialOptions.EnableAttestation`.
+
+The first call on a cold DAC explicitly requests PoP, exercising the managed
+identity probe and bound-token acquisition before bearer selection. Automatic
+SDK reads use a second fresh DAC to exercise cold chain selection there too.
+The probe is delegated to MSAL's `Capabilities` API under a one-second context
+deadline, or the caller's earlier deadline, with retries disabled. Acquisition
+then uses the original context. This is a probe/network deadline, not a
+one-second limit on attestation or the entire token/resource flow.
+
+Fixture-free DAC regressions in the ordinary `azidentity` suite verify real
+MSAL v2/v1 probe requests, one-second timeout/cancellation, no retries,
+recovery after timeout, caller-deadline preservation, no repeated discovery
+after success, and attestation-option propagation. They deliberately simulate
+IMDSv1 discovery to avoid creating native keys. An unrelated HTTP response is no
+longer treated as proof that an IMDS source exists.
+
 ### Certificate reissuance and cross-language coexistence
 
 Use MSAL's existing Windows live test

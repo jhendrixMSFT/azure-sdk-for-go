@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -83,6 +84,9 @@ func TestConfiguration(t *testing.T) {
 		{"negative concurrency", func(c *configuration) { c.concurrency = -1 }},
 		{"no concurrency", func(c *configuration) { c.concurrency = 1 }},
 		{"unbounded concurrency", func(c *configuration) { c.concurrency = 9 }},
+		{"DAC object ID", func(c *configuration) { c.dac, c.objectID = true, "object" }},
+		{"DAC resource ID", func(c *configuration) { c.dac, c.resourceID = true, "resource" }},
+		{"DAC isolation", func(c *configuration) { c.dac, c.isolationClientID = true, "client" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := base
@@ -99,6 +103,47 @@ func TestConfiguration(t *testing.T) {
 		{configuration{resourceID: "resource"}, azidentity.ResourceID("resource")},
 	} {
 		assert.Equal(t, tc.id, tc.cfg.identity())
+	}
+}
+
+func TestDACEnvironment(t *testing.T) {
+	for _, name := range []string{
+		"AZURE_TENANT_ID", "AZURE_CLIENT_SECRET", "AZURE_CLIENT_CERTIFICATE_PATH",
+		"AZURE_USERNAME", "AZURE_PASSWORD", "AZURE_FEDERATED_TOKEN_FILE", "AZURE_CLIENT_ID",
+	} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("AZURE_TOKEN_CREDENTIALS", "prod")
+	require.NoError(t, os.Unsetenv("AZURE_CLIENT_ID"))
+	for _, tc := range []struct {
+		name, variable, value, clientID, wantErr string
+	}{
+		{name: "system assigned"},
+		{name: "user assigned", variable: "AZURE_CLIENT_ID", value: "CLIENT", clientID: "client"},
+		{name: "missing UAMI environment", clientID: "client", wantErr: "must match"},
+		{name: "wrong UAMI", variable: "AZURE_CLIENT_ID", value: "other", clientID: "client", wantErr: "must match"},
+		{name: "implicit UAMI", variable: "AZURE_CLIENT_ID", value: "client", wantErr: "unset"},
+		{name: "empty client ID is not unset", variable: "AZURE_CLIENT_ID", wantErr: "unset"},
+		{name: "probe disabled", variable: "AZURE_TOKEN_CREDENTIALS", value: "ManagedIdentityCredential", wantErr: "=prod"},
+		{name: "developer fallback", variable: "AZURE_TOKEN_CREDENTIALS", value: "dev", wantErr: "=prod"},
+		{name: "configured environment", variable: "AZURE_TENANT_ID", value: "tenant", wantErr: "unconfigured"},
+		{name: "configured workload", variable: "AZURE_FEDERATED_TOKEN_FILE", value: "file", wantErr: "unconfigured"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.variable != "" {
+				t.Setenv(tc.variable, tc.value)
+			}
+			cfg := configuration{dac: true, clientID: tc.clientID}
+			credential, err := newSmokeCredential(cfg)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				assert.Nil(t, credential)
+				return
+			}
+			require.NoError(t, err)
+			assert.IsType(t, &azidentity.DefaultAzureCredential{}, credential)
+			assert.Equal(t, "prod", os.Getenv("AZURE_TOKEN_CREDENTIALS"), "the smoke must not mutate chain configuration")
+		})
 	}
 }
 

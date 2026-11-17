@@ -36,7 +36,7 @@ const (
 	serviceFabricAPIVersion  = "2019-07-01-preview"
 )
 
-var imdsProbeTimeout = time.Second
+const imdsProbeTimeout = time.Second
 
 type managedIdentityClient struct {
 	azClient                      *azcore.Client
@@ -233,22 +233,20 @@ func (c *managedIdentityClient) GetToken(ctx context.Context, tro policy.TokenRe
 	// no need to synchronize around this value because it's true only when DefaultAzureCredential constructed the client,
 	// and in that case ChainedTokenCredential.GetToken synchronizes goroutines that would execute this block
 	if c.probeIMDS {
-		// send a malformed request (no Metadata header) to IMDS to determine whether the endpoint is available
 		cx, cancel := context.WithTimeout(ctx, imdsProbeTimeout)
-		defer cancel()
 		cx = policy.WithRetryOptions(cx, policy.RetryOptions{MaxRetries: -1})
-		req, err := azruntime.NewRequest(cx, http.MethodGet, imdsEndpoint)
+		capabilities, err := c.msalClient.Capabilities(cx)
+		cancel()
 		if err != nil {
-			return azcore.AccessToken{}, fmt.Errorf("failed to create IMDS probe request: %s", err)
-		}
-		if _, err = c.azClient.Pipeline().Do(req); err != nil {
 			msg := err.Error()
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				msg = "managed identity timed out. See https://aka.ms/azsdk/go/identity/troubleshoot#dac for more information"
 			}
 			return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, msg)
 		}
-		// send normal token requests from now on because something responded
+		if capabilities.Source == "" {
+			return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, "no managed identity endpoint detected: "+capabilities.ErrorReason)
+		}
 		c.probeIMDS = false
 	}
 

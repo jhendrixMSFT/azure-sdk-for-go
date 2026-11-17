@@ -79,20 +79,44 @@ fails rather than authenticating the machine's system-assigned identity.
 
 ### Managed identity mTLS proof of possession
 
-`ManagedIdentityCredential` can acquire certificate-bound (`mtls_pop`) tokens on Windows virtual
+`ManagedIdentityCredential`, including the instance used by `DefaultAzureCredential`, can acquire
+certificate-bound (`mtls_pop`) tokens on Windows virtual
 machines with Credential Guard enabled and IMDSv2 available. The target resource must support
 certificate-bound tokens. Set `EnableMTLSPoP: true` in the **resource client's** embedded
 `azcore.ClientOptions` to request these tokens and automatically present their binding certificates.
 The option isn't needed on the credential's client options.
 
 When IMDS requires an attested binding key, set
-`ManagedIdentityCredentialOptions.EnableAttestation: true` when constructing the credential.
+`ManagedIdentityCredentialOptions.EnableAttestation: true` or
+`DefaultAzureCredentialOptions.EnableAttestation: true` when constructing the credential.
 This opts mTLS PoP requests into KeyGuard attestation; ordinary bearer requests are unchanged.
 Deploy `AttestationClientLib.dll` from the `Microsoft.Azure.Security.KeyGuardAttestation` package
 alongside the executable or into System32, and install the
 [x64 Microsoft Visual C++ 2015-2022 Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist).
 Attestation is disabled by default. When enabled, attestation failures fail acquisition rather
 than falling back to an unattested credential.
+
+For example, construct an attestation-enabled default credential:
+
+```go
+cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+  EnableAttestation: true,
+})
+if err != nil {
+  // handle error
+}
+```
+
+Enable `ClientOptions.EnableMTLSPoP` on the resource client as described above.
+Configure `AZURE_CLIENT_ID` to select a UAMI. Other credentials in the default
+chain do not gain managed-identity mTLS support through this option.
+When the chain includes managed identity and other credentials, its initial IMDS
+discovery is delegated to MSAL under a one-second context deadline (or the caller's
+earlier deadline), with retries disabled. MSAL must detect an IMDS source; an
+arbitrary endpoint response is not enough. After discovery, token acquisition
+uses the original caller context, not the probe deadline.
+Selecting only `ManagedIdentityCredential` through `AZURE_TOKEN_CREDENTIALS`
+continues to skip this initial probe.
 
 Resource connections use TLS 1.2 with client-certificate renegotiation. Redirects and ARM auxiliary
 tenant authentication aren't supported. Custom transports for both the credential and resource

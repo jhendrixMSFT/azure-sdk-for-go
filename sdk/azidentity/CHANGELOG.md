@@ -10,10 +10,16 @@
   acquisition and mutually authenticated resource requests.
 - `ManagedIdentityCredentialOptions.EnableAttestation` enables KeyGuard key attestation for
   mTLS PoP token acquisition when IMDS requires an attested binding key.
+- `DefaultAzureCredentialOptions.EnableAttestation` enables the same attestation support for
+  the managed identity credential in the default chain.
 
 ### Breaking Changes
 
 ### Bugs Fixed
+
+- `DefaultAzureCredential` delegates its initial IMDS discovery to MSAL under a one-second
+  timeout, with retries disabled. Discovery now requires MSAL to detect an IMDS source rather
+  than accepting any endpoint response. The timeout doesn't apply to subsequent token acquisition.
 
 ### Other Changes
 

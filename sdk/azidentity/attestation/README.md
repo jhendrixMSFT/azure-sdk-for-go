@@ -4,7 +4,10 @@ This optional module enables automatic KeyGuard attestation for eligible managed
 mTLS proof-of-possession (PoP) requests made through `ManagedIdentityCredential` or
 `DefaultAzureCredential`. Native attestation is implemented by MSAL.
 
-This feature is unreleased. For local builds, use application-level replacements for this
+This feature is unreleased. Dependency floors and versions remain unchanged by agreement;
+the [qualification and release-ordering record](../design.md#6-run-parity-validation-and-coordinate-releases)
+lists passing live scenarios, coverage limits, and the remaining human publication steps.
+For local builds, use application-level replacements for this
 module, `azidentity`, `azcore`, SDK internals, and shared Key Vault internals, as shown by the
 [on-demand smoke app](../testdata/mtls-pop-smoke/README.md). The releasable module contains
 no local replacements.

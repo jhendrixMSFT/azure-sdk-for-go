@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,7 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation"
+	internalattestation "github.com/Azure/azure-sdk-for-go/sdk/azidentity/internal/attestation"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
@@ -41,6 +42,7 @@ type configuration struct {
 	concurrency                    int
 	isolationClientID              string
 	dac                            bool
+	disableMTLSPoP                 bool
 }
 
 func main() {
@@ -51,6 +53,7 @@ func main() {
 	flag.StringVar(&cfg.objectID, "object-id", "", "User-assigned identity object ID (mutually exclusive with other identity flags)")
 	flag.StringVar(&cfg.resourceID, "resource-id", "", "User-assigned identity resource ID (mutually exclusive with other identity flags)")
 	flag.BoolVar(&cfg.dac, "dac", false, "Use DefaultAzureCredential; requires AZURE_TOKEN_CREDENTIALS=prod and matching AZURE_CLIENT_ID for UAMI")
+	flag.BoolVar(&cfg.disableMTLSPoP, "disable-mtls-pop", false, "Run the explicit MIC bearer opt-out control instead of the positive PoP checks")
 	flag.IntVar(&cfg.concurrency, "concurrency", 0, "Opt in to shared/multiple-client concurrent reads with 2-8 workers; zero disables")
 	flag.StringVar(&cfg.isolationClientID, "isolation-client-id", "", "Opt in to alternating system-assigned and this UAMI client ID; both must read the secret")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "Overall test timeout")
@@ -64,6 +67,16 @@ func main() {
 func run(ctx context.Context, cfg configuration) error {
 	if err := cfg.validate(); err != nil {
 		return err
+	}
+	if internalattestation.Registered() != attestationImported {
+		return errors.New("attestation activation doesn't match this smoke build's import configuration")
+	}
+	bearerControl := cfg.disableMTLSPoP || !attestationImported
+	if bearerControl && (cfg.concurrency != 0 || cfg.isolationClientID != "") {
+		return errors.New("concurrency and identity isolation are positive PoP checks; run bearer controls separately")
+	}
+	if cfg.disableMTLSPoP && !attestationImported {
+		return errors.New("run disable-mtls-pop with the default imported build, and the no-import build without that flag")
 	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -87,6 +100,17 @@ func run(ctx context.Context, cfg configuration) error {
 	credential, err := newSmokeCredential(cfg)
 	if err != nil {
 		return fmt.Errorf("creating credential: %w", err)
+	}
+	if bearerControl {
+		if err := verifyBearerControl(ctx, cfg, credential, nil); err != nil {
+			return fmt.Errorf("bearer control: %w", err)
+		}
+		if cfg.disableMTLSPoP {
+			fmt.Println("PASS: imported integration with explicit MIC opt-out returns bearer tokens and SDK reads remain bearer")
+		} else {
+			fmt.Println("PASS: no-import control returns bearer tokens and SDK reads remain bearer")
+		}
+		return nil
 	}
 	if err := verifySDK(ctx, cfg, credential); err != nil {
 		return fmt.Errorf("automatic SDK mTLS PoP: %w", err)
@@ -176,13 +200,16 @@ func (c configuration) validate() error {
 	if c.dac && (c.objectID != "" || c.resourceID != "" || c.isolationClientID != "") {
 		return errors.New("dac supports only client-id selection; run identity isolation separately without dac")
 	}
+	if c.dac && c.disableMTLSPoP {
+		return errors.New("disable-mtls-pop is a MIC option; DAC has no additional public opt-out")
+	}
 	return nil
 }
 
 func newSmokeCredential(cfg configuration) (azcore.TokenCredential, error) {
 	if !cfg.dac {
 		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-			ID: cfg.identity(),
+			ID: cfg.identity(), DisableMTLSPoP: cfg.disableMTLSPoP,
 		})
 	}
 	if err := validateDACEnvironment(cfg); err != nil {
@@ -439,6 +466,7 @@ type checkedCredential struct {
 	calls      atomic.Int32
 	identity   *tokenIdentity
 	clientID   string
+	bearer     bool
 }
 
 func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
@@ -449,8 +477,14 @@ func (c *checkedCredential) GetToken(ctx context.Context, options policy.TokenRe
 	if err != nil {
 		return azcore.AccessToken{}, err
 	}
-	if _, err := validateBound(token, time.Now()); err != nil {
-		return azcore.AccessToken{}, err
+	if c.bearer {
+		if err := validateBearer(token); err != nil {
+			return azcore.AccessToken{}, err
+		}
+	} else {
+		if _, err := validateBound(token, time.Now()); err != nil {
+			return azcore.AccessToken{}, err
+		}
 	}
 	if c.identity != nil || c.clientID != "" {
 		got, err := readTokenIdentity(token.Token)
@@ -483,6 +517,57 @@ func verifySDK(ctx context.Context, cfg configuration, credential azcore.TokenCr
 		return errors.New("SDK resource calls never requested a bound token")
 	}
 	return nil
+}
+
+func verifyBearerControl(ctx context.Context, cfg configuration, credential azcore.TokenCredential, options *azsecrets.ClientOptions) error {
+	for _, requestPoP := range []bool{false, true} {
+		token, err := credential.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{vaultScope}, EnableMTLSPoP: requestPoP})
+		if err != nil {
+			return fmt.Errorf("direct control acquisition: %w", err)
+		}
+		if err := validateBearer(token); err != nil {
+			return err
+		}
+	}
+	cp := azsecrets.ClientOptions{}
+	if options != nil {
+		cp = *options
+	}
+	observer := &bearerControlPolicy{}
+	cp.PerRetryPolicies = append(slices.Clone(cp.PerRetryPolicies), observer)
+	checked := &checkedCredential{credential: credential, clientID: cfg.clientID, bearer: true}
+	client, err := newSecretClient(cfg, checked, &cp)
+	if err != nil {
+		return err
+	}
+	for i := 1; i <= 2; i++ {
+		if err := readSecret(ctx, client, cfg.secretName); err != nil {
+			return fmt.Errorf("control GetSecret #%d: %w", i, err)
+		}
+	}
+	if checked.calls.Load() == 0 || observer.anonymous != 1 || observer.authenticated != 2 {
+		return errors.New("bearer control didn't observe one cold challenge and two authenticated SDK reads")
+	}
+	return nil
+}
+
+type bearerControlPolicy struct {
+	anonymous, authenticated int
+}
+
+func (p *bearerControlPolicy) Do(req *policy.Request) (*http.Response, error) {
+	if req.Raw().Header.Get("x-ms-tokenboundauth") != "" {
+		return nil, errors.New("bearer control unexpectedly sent a token-binding header")
+	}
+	if authorization := req.Raw().Header.Get("Authorization"); authorization == "" {
+		p.anonymous++
+	} else {
+		if !strings.HasPrefix(authorization, "Bearer ") {
+			return nil, errors.New("bearer control unexpectedly sent non-bearer authorization")
+		}
+		p.authenticated++
+	}
+	return req.Next()
 }
 
 func newSecretClient(cfg configuration, credential azcore.TokenCredential, options *azsecrets.ClientOptions) (*azsecrets.Client, error) {

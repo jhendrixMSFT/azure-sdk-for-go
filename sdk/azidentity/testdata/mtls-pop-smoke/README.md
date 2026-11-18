@@ -6,7 +6,9 @@ using MSAL v1.11.0-beta.1, overridden by the local feature branch for reboot-rec
 validation. The identity, core, SDK-internal, and Key Vault shared modules are replaced with this checkout;
 replacements in a dependency's `go.mod` aren't inherited by an application.
 The executable checks those four SDK replacements in its build metadata. The optional
-attestation integration is also replaced locally and blank-imported by the app.
+attestation integration is also replaced locally and blank-imported by the default
+build. A [separate negative-control build](#separate-activation-and-opt-out-checks)
+omits that import.
 The app's `go.mod` also replaces MSAL with
 `C:\git\AzureAD\microsoft-authentication-library-for-go`. This replacement is
 local to the standalone test app; SDK dependency manifests are unchanged.
@@ -93,7 +95,7 @@ The app runs **on the VM** and authenticates as its managed identity, not the
 Azure CLI account. It doesn't need Azure CLI on the VM, a client secret, or a
 tenant-ID argument.
 
-The app blank-imports `azidentity/attestation`, automatically enabling attested issuance
+The default build blank-imports `azidentity/attestation`, automatically enabling attested issuance
 for eligible mTLS PoP requests; there is no `-attestation` flag. Deploy `AttestationClientLib.dll`
 from the `Microsoft.Azure.Security.KeyGuardAttestation` package
 (`runtimes/win-x64/native`) alongside the executable or into System32, and install
@@ -260,7 +262,7 @@ requires exposing force refresh through `azidentity`.
 
 ## Required results
 
-Every check must pass, the process must exit zero, and the final message must be
+For the default positive run, every check must pass, the process must exit zero, and the final message must be
 `PASS: all mTLS PoP smoke checks`:
 
 1. A fresh `azsecrets.Client` with no PoP enable flag reads the secret twice, before
@@ -281,8 +283,8 @@ Every check must pass, the process must exit zero, and the final message must be
 6. A subsequent ordinary acquisition on the same credential remains unbound,
    checking bearer/PoP cache isolation without assuming exact token reuse.
 
-The SDK now supports narrowly classified tenant-denial fallback, but this eligible-host
-smoke app deliberately requires bound tokens. A bearer result isn't a passing PoP smoke check.
+The SDK now supports narrowly classified tenant-denial fallback, but the positive
+eligible-host scenario deliberately requires bound tokens. A bearer result isn't a passing PoP smoke check.
 Binding-validation retries use the normal outer retry policy; this app continues to disable
 automatic retries to make its live checks explicit.
 
@@ -302,7 +304,7 @@ leaves this transport configuration to `azcore`.
 
 - Acquisition failure: inspect Windows Credential Guard/KeyGuard, IMDSv2,
   identity assignment, Entra connectivity, and resource opt-in. The SDK selects bearer
-  on a known unsupported host; this app requires a bound token and reports that as a
+  on a known unsupported host; the positive scenario requires a bound token and reports that as a
   smoke-test failure. Selected attestation failures don't continue to another credential.
 - IMDS reports "Attestation Token is missing / empty": rebuild from the current checkout,
   retaining the attestation blank import and local module replacement, with the
@@ -342,12 +344,58 @@ initial challenge failed before the credential was called.
 
 ### Separate activation and opt-out checks
 
-The smoke executable always includes the blank import and requires bound tokens.
-Keep the parent identity suite and optional integration suite as separate test binaries
-to validate absence of the import and explicit MIC opt-out without changing that primary
-scenario. The [integration test commands](../../attestation/README.md#offline-activation-checks)
-exercise these controls with fake capabilities and local HTTP endpoints. They aren't
-hardware-backed no-import or opt-out live results; those remain in the phase-6 parity matrix.
+The default executable includes the blank import and requires bound tokens.
+Build a separate executable without the import, and run explicit MIC opt-out on
+the imported executable:
+
+```powershell
+$env:GOWORK = "off"
+go test ./... -count=1
+go test -tags noattestation ./... -count=1
+go build -trimpath -tags noattestation -o .\mtls-pop-smoke-noimport.exe .
+if ($LASTEXITCODE -ne 0) { throw "No-import build failed" }
+
+.\mtls-pop-smoke-noimport.exe `
+    -vault-url "https://<vault-name>.vault.azure.net" `
+    -secret-name "<existing-test-secret>"
+
+# Use the default imported executable built above.
+.\mtls-pop-smoke.exe -disable-mtls-pop `
+    -vault-url "https://<vault-name>.vault.azure.net" `
+    -secret-name "<existing-test-secret>"
+```
+
+Both controls require ordinary and PoP-requested direct acquisitions to return
+bearer tokens without binding certificates. A fresh SDK client must then read the
+secret twice with bearer authorization and no token-binding header. The
+fixture-free TLS control tests additionally reject presentation of a client certificate.
+Each control must exit zero with its own final message:
+
+- No import: `PASS: no-import control returns bearer tokens and SDK reads remain bearer`
+- Imported MIC opt-out: `PASS: imported integration with explicit MIC opt-out returns bearer tokens and SDK reads remain bearer`
+
+Repeat with `-client-id` for UAMI. The no-import executable also accepts `-dac`
+with the [DAC environment requirements](#defaultazurecredential-dac); the opt-out
+flag is MIC-only. Don't combine the no-import build with explicit opt-out, or
+combine either control with concurrency/identity-isolation flags.
+The `noattestation` build tag is private to this smoke app, not the SDK activation
+contract. It removes the optional package from the compiled dependency graph;
+merely keeping that module in `go.mod` does not activate it. Both variants check
+their actual registration state before running.
+
+Keep the parent identity suite and optional integration suite as separate binaries
+as well. The [integration test commands](../../attestation/README.md#offline-activation-checks)
+provide routine imported/unimported and opt-out coverage without hardware.
+
+### Qualification record
+
+The [phase-6 record](../../design.md#6-run-parity-validation-and-coordinate-releases)
+documents passing Windows MIC/DAC system/UAMI runs, shared/multiple-client and
+multiple-process concurrency, identity isolation, real certificate reissuance,
+sequential Go -> C# -> Go for both identities, and all six live bearer controls.
+It also records C# skips, unavailable live fault scenarios, compilation-only
+platform checks, and deferred release prerequisites. These results qualify local
+source builds, not published dependency versions.
 
 ### Offline regression coverage in normal CI
 

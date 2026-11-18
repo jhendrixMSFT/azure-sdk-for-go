@@ -2,9 +2,11 @@
 
 ## Status
 
-- Last updated: 2026-11-17.
+- Last updated: 2026-11-18.
 - Working branch: `mtls-pop-1`, based on the existing mTLS PoP implementation.
-- Current phase: phases 2 through 5 implemented and validated offline; phase 6 is next.
+- Current phase: phases 2 through 5 implemented; phase 6 qualification passed for
+  the available fixture. Release ordering is documented; version changes and
+  publication are deferred by agreement.
 - Automatic managed identity eligibility selection and blank-import activation
   are implemented, together with automatic Key Vault signaling, narrowly classified
   tenant fallback, and bounded binding-error retries. Native MSAL behavior is unchanged.
@@ -54,6 +56,7 @@ prerequisites remain necessary.
 | Choose reasonable initial public names during implementation; naming is not a blocker. Perform a final naming cleanup before release. | Agreed |
 | Keep hardware-backed live tests on demand; use fixture-free tests for routine regression protection. | Established testing approach |
 | Use minimal SDK-internal authentication-error and response-classification bridges, not a Key Vault runtime dependency on azidentity or combined-message parsing. Standard Go error methods are observable additions; no customer switches or new public error types. | Agreed and implemented in phase 4 |
+| Phase 6 documents release ordering only. Leave dependency manifests and versions unchanged; human release owners perform version alignment and publication later. | Agreed |
 
 Only an actual package import activates a Go package. Adding a requirement to
 `go.mod` alone is not activation. A transitive import can activate the integration
@@ -63,7 +66,8 @@ as well, which must be documented.
 
 This table describes the agreed automatic SDK contract, checked against the
 [pinned C# sources](#reference-implementation) and implemented through phase 5.
-Offline validation doesn't replace the outstanding hardware-backed parity matrix.
+The [phase-6 qualification](#6-run-parity-validation-and-coordinate-releases)
+records the hardware-backed results and the cases covered only offline.
 The constraint-driven adaptations below are agreed; phase 5 retains the selected API names.
 
 | Condition | Intended outcome |
@@ -468,7 +472,7 @@ modfile with local replacements, stripped before writing the generated manifest 
 Published Key Vault test dependency checksums were recorded separately.
 
 Source validation still requires matching local modules in a workspace or application
-replacements until phase 6 coordinates published dependency versions. The current VS Code
+replacements until matching feature-bearing dependency versions are published. The current VS Code
 language-server configuration still selects published core for identity and excludes the
 nested optional module, so its diagnostics aren't clean despite the successful workspace
 builds and vet. Configure the editor with the same local workspace before using its
@@ -481,38 +485,158 @@ and the full on-demand hardware parity matrix.
 
 ### 6. Run parity validation and coordinate releases
 
-**Status: pending; depends on stage 5.**
+**Status: completed for the available fixture on 2026-11-18. Dependency version
+alignment and publication are explicitly deferred, not completed release work.**
 
-Offline coverage must include:
+#### Activation controls
 
-- Imported/unimported activation and opt-out behavior.
-- Eligible and ineligible hosts, credentials, and transports.
-- Discovery errors versus successful discovery of an unsupported host.
-- Attestation failure without downgrade, including native-dependency failures.
-- Exact tenant-denial fallback, isolation, and bounded retry behavior.
-- Bearer/PoP and attested/unattested cache separation.
-- Cold challenges, certificate replacement, cancellation, and DAC timeout behavior.
-- Cross-platform compilation and platform-specific behavior where executable.
+The standalone smoke app now has separate default-imported and `noattestation`
+builds, plus an imported MIC `-disable-mtls-pop` control. These are test-app
+controls, not another customer activation mechanism or a public DAC option.
+The unimported dependency graph excludes the optional integration package, and
+each binary verifies its registration state.
 
-Repeat the on-demand live matrix:
+Controls require unbound bearer results for both ordinary and PoP-requested
+direct acquisition, then two real SDK reads with bearer authorization and no
+token-binding header. Their final success messages are distinct from the
+positive PoP smoke result. Local TLS tests also reject client certificates,
+bound results, and mutation of caller options. Concurrency and identity-isolation
+flags cannot be combined with bearer controls.
 
-- MIC and DAC with system-assigned identity and UAMI.
-- Matching-certificate success and missing/mismatched-certificate enforcement.
-- Shared-client, multiple-client, and multiple-process concurrency.
-- Same-process identity isolation.
-- Real certificate reissuance.
-- Sequential Go -> C# -> Go coexistence.
-- Separate no-import and explicit-opt-out runs.
+#### Offline qualification
 
-Do not claim natural lifetime-driven renewal, underlying key rotation, or a new
-post-reboot test unless those scenarios are actually exercised.
+Source validation selected all nine affected SDK modules in a temporary local
+workspace; the smoke app used its own replacements with `GOWORK=off`.
+`AZURE_RECORD_MODE=live` avoided the recording proxy for fixture-free unit
+tests; it did not turn those tests into Azure live tests.
 
-Coordinate releases in dependency order: SDK internals, azcore, identity and its optional
-integration, then Key Vault shared/client modules as required by their dependencies.
+| Scope | Validation and result |
+| --- | --- |
+| Parent identity | Focused MIC attestation/binding/PoP and transport-factory, DAC discovery/attestation, authentication-error, and credential-chain suites passed |
+| Optional attestation module | `go test github.com/Azure/azure-sdk-for-go/sdk/azidentity/attestation -count=3` passed, including imported SDK MIC/DAC selection and MIC opt-out |
+| Shared Key Vault module | `go test github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal/... -count=3` passed, including exact fallback classification, tenant isolation, cancellation, and bounded retries |
+| Core and SDK internals | Full core runtime, ARM runtime, policy, core internal exported, SDK error-info, and SDK internal exported suites passed |
+| Public Key Vault modules | Phase-4 selectors for `TestClientMTLSPoP`, request signaling, and disabled challenge verification passed across all seven consumers |
+| Nine affected SDK modules | Directory-local `go build ./...` and `go vet ./...` passed |
+| Smoke module | `go test ./... -count=1`, `go test -tags noattestation ./... -count=1`, and both corresponding `go vet` commands passed |
+| Smoke no-import dependency graph | `go list -tags noattestation -deps -f '{{.ImportPath}}' .` confirmed the optional integration package was absent |
+| MSAL managed identity | Cache separation, concurrent attested/plain acquisition, minimum-strength partitioning, C# cache-component parity, and force-refresh regressions passed three repetitions |
+| Linux amd64 and Darwin arm64 | All nine SDK modules and both smoke variants cross-built successfully; compilation only, not execution |
 
-**Exit criterion:** focused offline suites, builds, and static checks pass;
-available live scenarios pass; unsupported or unavailable scenarios are explicitly
-recorded rather than counted as passes.
+The focused parent selector was:
+
+```powershell
+go test github.com/Azure/azure-sdk-for-go/sdk/azidentity `
+    -run '^(TestManagedIdentityCredential_(Attestation|BindingCertificate|MTLSPoP.*)|TestManagedIdentityClient_MTLSFactory.*|TestDefaultAzureCredential_(IMDS|Attestation|AttestedProbe|UnexpectedIMDSResponse)|TestAuthenticationFailedError.*|TestChainedTokenCredential.*)$' -count=1
+```
+
+The additional MSAL selector, run from its checkout with `GOWORK=off`, was:
+
+```powershell
+go test .\apps\managedidentity `
+    -run '^(TestIMDSv2(AttestedAndNonAttestedCertificatesDoNotShareCache|BoundAndBearerTokensDoNotShareCache|ConcurrentAttestedAndPlainAcquisitions)|TestForceRefresh(BypassesTokenCache|ReissuesCertificateAndReusesKeyAndAttestation)|TestCacheKeySeparatesAttestation|TestCacheComponentsPartitionBy(MinStrength|Attestation)|TestCacheComponentValuesMatchDotNet)$' -count=3
+```
+
+No race-detector run was performed (`CGO_ENABLED=0`). Portability checks used
+module directories, avoiding unrelated cached optional modules.
+
+#### Windows live qualification
+
+Runs used the approved Windows KeyGuard/IMDSv2 VM, token-binding-enabled public
+Azure Key Vault, and authorized system and user-assigned identities. Fixture
+identifiers and secret values are not embedded in reusable documentation.
+The Go smoke app used MSAL checkout `3a911b0`; its pre-existing modified live
+test was reused without changes. This is local-source qualification, not
+qualification of published package versions.
+
+| Scenario | Result |
+| --- | --- |
+| MIC, system-assigned identity | Passed cold automatic SDK reads, bearer/PoP/bearer isolation, matching-certificate success, and missing-certificate enforcement |
+| MIC, UAMI | Passed the same checks, including selected-client-ID validation |
+| DAC, system-assigned identity and UAMI | Both passed the same checks with `AZURE_TOKEN_CREDENTIALS=prod`, including the cold managed identity discovery path |
+| Shared and multiple clients | Four-way waves passed in each of the four MIC/DAC identity combinations |
+| Same-process identity isolation | Alternating system/UAMI SDK and direct acquisitions passed without crossing principals |
+| Multiple processes | System and UAMI smoke processes were observed running simultaneously; both completed their four-way client checks and exited zero |
+| Real certificate reissuance | MSAL `TestIMDSv2BoundTokenIsRejectedWithoutCertificate` passed: original and reissued pairs worked; missing and mismatched certificates were rejected; a subsequent fresh Go SDK smoke run passed |
+| Sequential Go -> C# -> Go | Passed separately for system identity and UAMI; each C# run reported 15 passed, zero failed, 11 skipped, and exit zero |
+| No-import controls | MIC and DAC each passed for system identity and UAMI: four bearer-control runs |
+| Imported explicit MIC opt-out | Passed for system identity and UAMI: two bearer-control runs |
+
+The reissuance test requires distinct certificates and binding-specific mismatch
+rejection, or the exact TLS bad-certificate alert after the client supplied its
+certificate; an arbitrary 403 or transport failure is not accepted. The initial
+multi-process orchestration completed both apps but could not report exit codes
+reliably through PowerShell `Start-Process`; a repeat with retained .NET process
+handles verified both zero exit codes. Neither that harness issue nor a corrected
+test-argument quoting error was an SDK test failure.
+
+The verified C# bundle used the reference source pin
+`f75fadb8d36d8fdf46b03d11193b8dd6009f498f`, Azure.Core 1.63.0,
+MSAL/KeyAttestation 4.90.0, and native KeyGuardAttestation 1.1.7.
+Per-case reports and safe Go console output were retained in session evidence.
+No shared keys/certificates were deleted and no reboot was performed.
+
+#### Qualification limits
+
+- Real denied-tenant fallback and forced binding-validation HTTP 401 retries were
+  not exercised: no approved denied-tenant/fault-injection fixture was available.
+  Their exact classification, fresh bearer acquisition, tenant memory, and retry
+  bounds have offline coverage.
+- Live resource reads covered Secrets, not optional Keys, Certificates, or Managed
+  HSM fixtures. All seven shared-policy consumers passed offline integration checks.
+- Native dependency failures, unsupported hosts/transports, and cancellation have
+  offline coverage; no live dependency removal, outage, TLS/revocation fault, RBAC
+  mutation, or denied-identity experiment was performed.
+- C# skips are not passes. Its optional metadata, denial, rotation, and destructive
+  fault scenarios were not qualified by the 15 passing cases.
+- Certificate reissuance does not establish natural lifetime-driven renewal,
+  rotation of the underlying key, or recovery after a new reboot. The earlier
+  post-reboot baseline below is historical, not a new phase-6 result.
+- Linux/macOS execution and the race detector remain unverified.
+
+#### Release ordering and remaining human work
+
+**Agreed scope: documentation only.** No dependency manifests, sums, package
+versions, telemetry constants, or release automation were changed in phase 6.
+The current dependency floors do not select all unpublished feature-bearing
+modules in isolation; successful workspace builds are not release readiness.
+
+Before publication, release owners must choose compatible versions and align
+runtime dependency floors in this order:
+
+1. SDK `internal`: publish the authentication-error and response-classification
+   bridges.
+2. `azcore`: require that SDK-internal version and publish adaptive token/transport
+   handling and response classification.
+3. `azidentity`: require matching core/internals and publish automatic selection
+   and the optional-module registration contract.
+4. Key Vault shared `internal`: require matching core/internals and publish the
+   automatic signal, tenant fallback, and binding-response classification.
+   This step can proceed independently of identity after its own prerequisites.
+5. Public Key Vault clients: raise their shared/core floors and any test/client
+   dependencies needed for the selected versions, then publish. Add new
+   unreleased versions where necessary rather than editing released changelog entries.
+6. Optional `azidentity/attestation`: require the published parent identity and
+   matching core/internals. Its example/test dependency graph also includes
+   `azsecrets` and Key Vault internals; publish only after every version selected
+   by that graph is available. It need not wait for unrelated public clients.
+
+This is a dependency graph, not a requirement to serialize independent branches.
+SDK internals already have older core/identity test dependencies: do not blindly
+raise them and introduce a release bootstrap cycle. Distinguish runtime floors
+from test/example dependencies, especially in the optional module. Confirm the
+shipping MSAL/native versions provide the behavior tested with the smoke app's
+local MSAL replacement.
+
+Human follow-up includes version/floor assignment, sums, changelogs and telemetry
+constants as appropriate, isolated builds/tests with published prerequisites and
+no local workspace/replacements, and the normal
+[release checklist](../../documentation/development/release.md).
+Release readiness, publishing, and approvals were not invoked.
+
+**Exit criterion met for the agreed scope:** focused offline suites, builds, and
+static checks passed; available live scenarios passed; unavailable scenarios and
+the deferred publication prerequisites are explicitly recorded.
 
 ## Validated baseline
 
@@ -566,3 +690,4 @@ parity target; changing that target requires an explicit decision:
 | 2026-11-17 | Completed phase 3: optional blank-import registration, lazy availability lookup, automatic KeyGuard eligibility, MIC opt-out, and DAC bounded-probe reuse. Imported/unimported offline tests and portability checks passed. |
 | 2026-11-17 | Approved and implemented phase 4 internal bridges. Automatic Key Vault request signaling, structured tenant-denial fallback, and bounded binding-validation retries passed focused and repeated offline tests across all seven consumers, real local TLS, builds, vet, and scoped cross-compilation. Hardware parity and release coordination remain pending. |
 | 2026-11-17 | Completed phase 5: retained the MIC opt-out and direct-request signal, removed the unreleased client enable flag and eager transport preparation, added compiled blank-import/default-client examples and imported SDK selection tests, moved automatic SDK smoke checks first, and removed the identity manifest's local replacement. Separate imported/unimported controls, core and consumer regressions, builds, vet, and Linux/macOS compilation passed. Editor workspace selection and source-only dependency constraints are documented; hardware parity and publication remain phase 6. |
+| 2026-11-18 | Completed phase 6 for the available fixture: added separate live bearer controls; repeated offline SDK/MSAL regressions, builds, vet, and cross-builds; passed MIC/DAC system/UAMI, client/process concurrency, identity isolation, real certificate reissuance, and Go/C# coexistence. Recorded live gaps and C# skips without counting them as passes. By agreement, documented release ordering only; dependency/version alignment and publication remain human follow-up. |

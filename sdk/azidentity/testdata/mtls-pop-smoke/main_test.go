@@ -87,6 +87,7 @@ func TestConfiguration(t *testing.T) {
 		{"DAC object ID", func(c *configuration) { c.dac, c.objectID = true, "object" }},
 		{"DAC resource ID", func(c *configuration) { c.dac, c.resourceID = true, "resource" }},
 		{"DAC isolation", func(c *configuration) { c.dac, c.isolationClientID = true, "client" }},
+		{"DAC opt out", func(c *configuration) { c.dac, c.disableMTLSPoP = true, true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := base
@@ -459,6 +460,53 @@ func TestKeyVaultSDKColdChallenge(t *testing.T) {
 	assert.Equal(t, int32(1), challenges.Load())
 	assert.Equal(t, int32(3), requests.Load())
 	assert.Equal(t, int32(1), credential.calls.Load())
+}
+
+func TestBearerControl(t *testing.T) {
+	for _, bound := range []bool{false, true} {
+		name := "bearer"
+		if bound {
+			name = "reject bound result"
+		}
+		t.Run(name, func(t *testing.T) {
+			var acquisitions int
+			credential := tokenCredentialFunc(func(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+				acquisitions++
+				if bound {
+					return testToken(t), nil
+				}
+				return azcore.AccessToken{Token: "bearer-control", ExpiresOn: time.Now().Add(time.Hour)}, nil
+			})
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Empty(t, r.TLS.PeerCertificates)
+				assert.Empty(t, r.Header.Get("x-ms-tokenboundauth"))
+				if r.Header.Get("Authorization") == "" {
+					w.Header().Set("WWW-Authenticate",
+						`Bearer authorization="https://login.microsoftonline.com/tenant" resource="https://vault.azure.net"`)
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				assert.Equal(t, "Bearer bearer-control", r.Header.Get("Authorization"))
+				_, err := w.Write([]byte(`{"value":"not-logged"}`))
+				assert.NoError(t, err)
+			}))
+			server.TLS = &tls.Config{ClientAuth: tls.RequestClientCert}
+			server.StartTLS()
+			defer server.Close()
+			options := &azsecrets.ClientOptions{
+				ClientOptions:                        azcore.ClientOptions{Transport: server.Client()},
+				DisableChallengeResourceVerification: true,
+			}
+			err := verifyBearerControl(context.Background(), configuration{vaultURL: server.URL, secretName: "test-secret"}, credential, options)
+			if bound {
+				require.ErrorContains(t, err, "without a binding certificate")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 3, acquisitions, "ordinary, PoP-requested, and one cached SDK acquisition")
+				assert.Empty(t, options.PerRetryPolicies, "control observers must not mutate caller options")
+			}
+		})
+	}
 }
 
 func TestVerifyBuild(t *testing.T) {
